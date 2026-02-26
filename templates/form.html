@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Загрузка остатков - Pirelli</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #f8f9fa;
+            padding: 30px;
+            text-align: center;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #666;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        
+        .upload-text {
+            color: #666;
+            margin-bottom: 15px;
+        }
+        
+        .browse-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .browse-btn:hover {
+            background: #5a6fd8;
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .file-info {
+            background: #e8f4fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .stats {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .stat-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        
+        .pirelli-section {
+            background: #f0f4ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .pirelli-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        .pirelli-title span {
+            background: #667eea;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            background: #5a6fd8;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-success:hover:not(:disabled) {
+            background: #218838;
+        }
+        
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .btn-info:hover:not(:disabled) {
+            background: #138496;
+        }
+        
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        
+        th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .badge-winter {
+            background: #e3f2fd;
+            color: #0d47a1;
+        }
+        
+        .badge-summer {
+            background: #fff3e0;
+            color: #e65100;
+        }
+        
+        .badge-year {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Загрузка остатков Pirelli</h1>
+            <p>Загрузите файл из 1С для отправки в систему Pirelli</p>
+        </div>
+        
+        <div class="content">
+            <div class="form-group">
+                <label for="password">Пароль</label>
+                <input type="password" id="password" placeholder="Введите пароль">
+            </div>
+            
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Перетащите CSV файл сюда или нажмите для выбора</div>
+                <button class="browse-btn" onclick="document.getElementById('fileInput').click()">
+                    Выбрать файл
+                </button>
+                <input type="file" id="fileInput" accept=".xlsx">
+            </div>
+            
+            <div class="file-info" id="fileInfo">
+                <strong>Файл:</strong> <span id="fileName"></span><br>
+                <small id="uploadDate"></small>
+            </div>
+            
+            <div id="processingArea" style="display: none;">
+                <div class="stats" id="stats"></div>
+                
+                <div class="pirelli-section">
+                    <div class="pirelli-title">
+                        Pirelli / Formula
+                        <span id="pirelliCount">0</span>
+                    </div>
+                    
+                    <div class="actions">
+                        <button class="btn-info" id="downloadBtn" onclick="downloadPirelli()" disabled>
+                            📥 Скачать CSV
+                        </button>
+                        <button class="btn-success" id="sendBtn" onclick="sendToPirelli()" disabled>
+                            📤 Отправить в Pirelli
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="table-container">
+                    <table id="itemsTable">
+                        <thead>
+                            <tr>
+                                <th>Бренд</th>
+                                <th>Сезон</th>
+                                <th>Код 1С</th>
+                                <th>Код Pirelli</th>
+                                <th>Наименование</th>
+                                <th>Типоразмер</th>
+                                <th>Остаток</th>
+                                <th>Годовой</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="result" id="result"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentFile = null;
+        let processedData = null;
+        
+        // Drag & drop
+        const uploadArea = document.getElementById('uploadArea');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            uploadArea.classList.add('hover');
+        }
+        
+        function unhighlight() {
+            uploadArea.classList.remove('hover');
+        }
+        
+        uploadArea.addEventListener('drop', handleDrop, false);
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }
+        
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            handleFiles(this.files);
+        });
+        
+        function handleFiles(files) {
+            if (files.length === 0) return;
+            
+            const file = files[0];
+            if (!file.name.toLowerCase().endsWith('.xlsx')) {
+                showResult('Можно загружать только XLSX файлы', false);
+                return;
+            }
+            
+            uploadFile(file);
+        }
+        
+        async function uploadFile(file) {
+            const password = document.getElementById('password').value;
+            if (!password) {
+                showResult('Введите пароль', false);
+                return;
+            }
+            
+            showLoading('Загрузка файла...');
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('password', password);
+            
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentFile = result.data.filename;
+                    document.getElementById('fileName').textContent = file.name;
+                    document.getElementById('uploadDate').textContent = new Date().toLocaleString();
+                    document.getElementById('fileInfo').style.display = 'block';
+                    
+                    await processFile(currentFile);
+                } else {
+                    showResult(result.message, false);
+                }
+            } catch (error) {
+                showResult('Ошибка: ' + error.message, false);
+            }
+        }
+        
+        async function processFile(filename) {
+            const password = document.getElementById('password').value;
+            
+            showLoading('Обработка файла...');
+            
+            try {
+                const response = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        password: password,
+                        filename: filename
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    processedData = result.data;
+                    displayData(processedData);
+                    document.getElementById('processingArea').style.display = 'block';
+                    showResult('Файл успешно обработан', true);
+                } else {
+                    showResult(result.message, false);
+                }
+            } catch (error) {
+                showResult('Ошибка: ' + error.message, false);
+            }
+        }
+        
+        function displayData(data) {
+            // Статистика
+            const stats = data.stats;
+            document.getElementById('stats').innerHTML = `
+                <h3>Статистика обработки</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value">${stats.total_rows}</div>
+                        <div class="stat-label">Всего строк</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${stats.valid_rows}</div>
+                        <div class="stat-label">Корректных</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${stats.invalid_rows}</div>
+                        <div class="stat-label">С ошибками</div>
+                    </div>
+                </div>
+            `;
+            
+            // Pirelli
+            const pirelliItems = data.pirelli_items || [];
+            document.getElementById('pirelliCount').textContent = pirelliItems.length;
+            
+            const downloadBtn = document.getElementById('downloadBtn');
+            const sendBtn = document.getElementById('sendBtn');
+            
+            if (pirelliItems.length > 0) {
+                downloadBtn.disabled = false;
+                sendBtn.disabled = false;
+            } else {
+                downloadBtn.disabled = true;
+                sendBtn.disabled = true;
+            }
+            
+            // Таблица
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            
+            const allItems = data.all_items || [];
+            allItems.forEach(item => {
+                const row = tbody.insertRow();
+                
+                // Бренд
+                row.insertCell().textContent = item.clean_brand || '-';
+                
+                // Сезон
+                const seasonCell = row.insertCell();
+                if (item.season) {
+                    const badge = document.createElement('span');
+                    badge.className = `badge badge-${item.season === 'зима' ? 'winter' : 'summer'}`;
+                    badge.textContent = item.season;
+                    seasonCell.appendChild(badge);
+                } else {
+                    seasonCell.textContent = '-';
+                }
+                
+                // Код 1С
+                row.insertCell().textContent = item.code_1c || '-';
+                
+                // Код производителя
+                row.insertCell().textContent = item.manufacturer_sku || '-';
+                
+                // Наименование
+                row.insertCell().textContent = item.name || '-';
+                
+                // Типоразмер
+                row.insertCell().textContent = item.tire_size || '-';
+                
+                // Остаток
+                row.insertCell().textContent = item.quantity || 0;
+                
+                // Годовой
+                const yearCell = row.insertCell();
+                if (item.is_year_old) {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge badge-year';
+                    badge.textContent = 'год';
+                    yearCell.appendChild(badge);
+                } else {
+                    yearCell.textContent = '-';
+                }
+            });
+            
+            // Ошибки
+            if (stats.errors && stats.errors.length > 0) {
+                let errorsHtml = '<h4>Ошибки при обработке:</h4><ul>';
+                stats.errors.forEach(err => {
+                    errorsHtml += `<li>${err}</li>`;
+                });
+                errorsHtml += '</ul>';
+                document.getElementById('stats').innerHTML += errorsHtml;
+            }
+        }
+        
+        async function downloadPirelli() {
+            const password = document.getElementById('password').value;
+            window.location.href = `/api/download-pirelli?password=${password}&file=${processedData.filename}`;
+        }
+        
+        async function sendToPirelli() {
+            const password = document.getElementById('password').value;
+            
+            showLoading('Отправка в Pirelli...');
+            
+            try {
+                const response = await fetch('/api/send-pirelli', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        password: password,
+                        filename: processedData.filename
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    let message = result.message;
+                    if (result.data && result.data.data && result.data.data.length > 0) {
+                        const last = result.data.data[result.data.data.length - 1];
+                        message += `\nФайл: ${last.original_name}, время: ${last.datetime}`;
+                    }
+                    showResult(message, true);
+                } else {
+                    showResult(result.message, false);
+                }
+            } catch (error) {
+                showResult('Ошибка: ' + error.message, false);
+            }
+        }
+        
+        function showLoading(message) {
+            const result = document.getElementById('result');
+            result.innerHTML = `<div class="loading"></div> ${message}`;
+            result.className = 'result';
+            result.style.display = 'block';
+        }
+        
+        function showResult(message, isSuccess) {
+            const result = document.getElementById('result');
+            result.textContent = message;
+            result.className = 'result ' + (isSuccess ? 'success' : 'error');
+            result.style.display = 'block';
+            
+            if (isSuccess) {
+                setTimeout(() => {
+                    result.style.display = 'none';
+                }, 5000);
+            }
+        }
+    </script>
+</body>
+</html>
