@@ -2,7 +2,6 @@ package processors
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -14,13 +13,15 @@ import (
 
 // StockParser парсер Excel файлов
 type StockParser struct {
-	StartRow int // строка с которой начинаются данные (по умолчанию 12)
+	StartRow      int
+	PirelliBrands []string // список брендов для отчета Pirelli
 }
 
 // NewStockParser создает новый парсер
-func NewStockParser(startRow int) *StockParser {
+func NewStockParser(startRow int, pirelliBrands []string) *StockParser {
 	return &StockParser{
-		StartRow: startRow,
+		StartRow:      startRow,
+		PirelliBrands: pirelliBrands,
 	}
 }
 
@@ -71,8 +72,7 @@ func (p *StockParser) Parse(file *excelize.File) (*models.ProcessedFile, error) 
 		result.Stats.ValidRows++
 		result.AllItems = append(result.AllItems, *item)
 
-		// Если это Pirelli или Formula, добавляем в отдельный список
-		// Отправляем только позиции с количеством и кодом производителя
+		// Если это бренд из списка Pirelli, добавляем в отдельный список
 		if item.IsPirelli && item.Quantity > 0 && item.ManufacturerSKU != "" {
 			result.PirelliItems = append(result.PirelliItems, *item)
 			result.Stats.PirelliCount++
@@ -95,27 +95,26 @@ func (p *StockParser) parseRow(row []string, rowNum int) (*models.StockItem, err
 		item.IsYearOld = strings.Contains(strings.ToLower(item.Name), "год")
 	}
 
-	// Столбец B (индекс 1) - бренд (с сезоном)
-	if len(row) > 1 {
-		item.Brand = cleanString(row[1])
-		item.CleanBrand, item.Season = extractBrandAndSeason(item.Brand)
+	// Столбец C (индекс 2) - бренд + сезонность
+	if len(row) > 2 {
+		brandField := cleanString(row[2])
+		item.Brand = brandField
 
-		// Проверяем, относится ли к Pirelli/Formula
-		brandLower := strings.ToLower(item.CleanBrand)
-		item.IsPirelli = strings.Contains(brandLower, "pirelli") ||
-			strings.Contains(brandLower, "пирелли") ||
-			strings.Contains(brandLower, "formula") ||
-			strings.Contains(brandLower, "формула")
+		// Извлекаем бренд и сезон
+		item.CleanBrand, item.Season = extractBrandAndSeason(brandField)
+
+		// Проверяем, относится ли к брендам из списка Pirelli
+		item.IsPirelli = p.isPirelliBrand(item.CleanBrand)
 	}
 
 	// Столбец F (индекс 5) - код 1С
 	if len(row) > 5 {
-		item.Code1C = cleanCode(row[5])
+		item.Code1C = cleanCodeDigits(row[5])
 	}
 
 	// Столбец G (индекс 6) - код производителя
 	if len(row) > 6 {
-		item.ManufacturerSKU = cleanCode(row[6])
+		item.ManufacturerSKU = cleanCodeDigits(row[6])
 	}
 
 	// Столбец H (индекс 7) - типоразмер
@@ -125,7 +124,7 @@ func (p *StockParser) parseRow(row []string, rowNum int) (*models.StockItem, err
 
 	// Столбец I (индекс 8) - остаток
 	if len(row) > 8 {
-		quantity, err := strconv.Atoi(cleanNumber(row[8]))
+		quantity, err := strconv.Atoi(cleanDigits(row[8]))
 		if err == nil {
 			item.Quantity = quantity
 		}
@@ -133,7 +132,7 @@ func (p *StockParser) parseRow(row []string, rowNum int) (*models.StockItem, err
 
 	// Столбец J (индекс 9) - цена
 	if len(row) > 9 {
-		priceStr := strings.ReplaceAll(cleanNumber(row[9]), ",", ".")
+		priceStr := cleanPrice(row[9])
 		price, err := strconv.ParseFloat(priceStr, 64)
 		if err == nil {
 			item.Price = price
@@ -156,60 +155,142 @@ func (p *StockParser) parseRow(row []string, rowNum int) (*models.StockItem, err
 	return item, nil
 }
 
-// extractBrandAndSeason извлекает бренд и сезон
+// isPirelliBrand проверяет, входит ли бренд в список Pirelli
+func (p *StockParser) isPirelliBrand(brand string) bool {
+	brandLower := strings.ToLower(brand)
+	for _, pb := range p.PirelliBrands {
+		pbLower := strings.ToLower(pb)
+		// Проверяем вхождение (на случай если в бренде есть дополнительные слова)
+		if strings.Contains(brandLower, pbLower) || strings.Contains(pbLower, brandLower) {
+			return true
+		}
+	}
+	return false
+}
+
+// extractBrandAndSeason извлекает бренд и сезон из поля (столбец C)
 func extractBrandAndSeason(field string) (brand string, season string) {
-	field = strings.ToLower(field)
+	fieldLower := strings.ToLower(field)
 
 	// Определяем сезон
-	if strings.Contains(field, "зима") ||
-		strings.Contains(field, "шип") ||
-		strings.Contains(field, "ice") ||
-		strings.Contains(field, "winter") {
+	if strings.Contains(fieldLower, "зима") ||
+		strings.Contains(fieldLower, "шип") ||
+		strings.Contains(fieldLower, "ice") ||
+		strings.Contains(fieldLower, "winter") {
 		season = "зима"
-	} else if strings.Contains(field, "лето") ||
-		strings.Contains(field, "summer") {
+	} else if strings.Contains(fieldLower, "лето") ||
+		strings.Contains(fieldLower, "summer") {
 		season = "лето"
 	}
 
-	// Удаляем сезон и *
+	// Удаляем сезон и *, но сохраняем регистр исходной строки
 	brand = field
-	brand = strings.ReplaceAll(brand, "зима", "")
-	brand = strings.ReplaceAll(brand, "лето", "")
-	brand = strings.ReplaceAll(brand, "*", "")
+	brand = strings.Replace(brand, "зима", "", -1)
+	brand = strings.Replace(brand, "Зима", "", -1)
+	brand = strings.Replace(brand, "лето", "", -1)
+	brand = strings.Replace(brand, "Лето", "", -1)
+	brand = strings.Replace(brand, "зима", "", -1)
+	brand = strings.Replace(brand, "лето", "", -1)
+	brand = strings.Replace(brand, "*", "", -1)
+
+	// Удаляем лишние пробелы
 	brand = strings.TrimSpace(brand)
 
-	// Убираем лишние пробелы
-	space := regexp.MustCompile(`\s+`)
-	brand = space.ReplaceAllString(brand, " ")
+	// Заменяем множественные пробелы на один
+	result := make([]rune, 0, len(brand))
+	lastWasSpace := false
 
-	// Приводим первую букву к заглавной
-	if len(brand) > 0 {
-		brand = strings.ToUpper(string(brand[0])) + brand[1:]
+	for _, r := range brand {
+		if r == ' ' {
+			if !lastWasSpace {
+				result = append(result, ' ')
+				lastWasSpace = true
+			}
+		} else {
+			result = append(result, r)
+			lastWasSpace = false
+		}
 	}
 
-	return brand, season
+	return string(result), season
 }
 
-// cleanString очищает строку
+// cleanString очищает строку от лишних пробелов, сохраняя кодировку
 func cleanString(s string) string {
+	// Не используем regexp для кириллицы, так как он может повредить кодировку
 	s = strings.TrimSpace(s)
-	space := regexp.MustCompile(`\s+`)
-	s = space.ReplaceAllString(s, " ")
-	return s
+
+	// Заменяем множественные пробелы на один
+	result := make([]rune, 0, len(s))
+	lastWasSpace := false
+
+	for _, r := range s {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			if !lastWasSpace {
+				result = append(result, ' ')
+				lastWasSpace = true
+			}
+		} else {
+			result = append(result, r)
+			lastWasSpace = false
+		}
+	}
+
+	return string(result)
 }
 
-// cleanCode очищает код
-func cleanCode(s string) string {
+// cleanCodeDigits оставляет только цифры в коде
+func cleanCodeDigits(s string) string {
 	s = strings.TrimSpace(s)
-	space := regexp.MustCompile(`\s+`)
-	s = space.ReplaceAllString(s, "")
-	return s
+	// Используем strings.Builder для эффективной сборки строки
+	var builder strings.Builder
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
 }
 
-// cleanNumber очищает число
-func cleanNumber(s string) string {
+// cleanDigits оставляет только цифры (для количества)
+func cleanDigits(s string) string {
 	s = strings.TrimSpace(s)
-	re := regexp.MustCompile(`[^\d.,-]`)
-	s = re.ReplaceAllString(s, "")
-	return s
+	var builder strings.Builder
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
+}
+
+// cleanPrice очищает цену, преобразуя "2 581,00" в 2581.00
+func cleanPrice(s string) string {
+	s = strings.TrimSpace(s)
+
+	// Удаляем все пробелы
+	var builder strings.Builder
+	for _, r := range s {
+		if r != ' ' && r != '\t' && r != '\n' && r != '\r' {
+			builder.WriteRune(r)
+		}
+	}
+	s = builder.String()
+
+	// Заменяем запятую на точку
+	s = strings.ReplaceAll(s, ",", ".")
+
+	// Оставляем только цифры и точку
+	builder.Reset()
+	dotCount := 0
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			builder.WriteRune(r)
+		} else if r == '.' && dotCount == 0 {
+			builder.WriteRune(r)
+			dotCount++
+		}
+	}
+
+	return builder.String()
 }

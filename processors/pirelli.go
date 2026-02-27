@@ -21,7 +21,7 @@ func NewPirelliProcessor(customerCode string) *PirelliProcessor {
 	}
 }
 
-// CreateCSV создает CSV для отправки в Pirelli
+// CreateCSV создает CSV для отправки в Pirelli (стандартный формат без лишних запятых)
 func (p *PirelliProcessor) CreateCSV(items []models.StockItem, writer io.Writer) error {
 	csvWriter := csv.NewWriter(writer)
 	defer csvWriter.Flush()
@@ -59,8 +59,15 @@ func (p *PirelliProcessor) CreateCSV(items []models.StockItem, writer io.Writer)
 	return nil
 }
 
-// GenerateFilename генерирует имя файла
+// GenerateFilename генерирует имя файла для скачивания/сохранения (только дата)
 func (p *PirelliProcessor) GenerateFilename() string {
+	return fmt.Sprintf("IR_%s_%s.csv",
+		p.CustomerCode,
+		time.Now().Format("20060102"))
+}
+
+// GenerateFilenameWithTime генерирует имя файла с временем (для отладки)
+func (p *PirelliProcessor) GenerateFilenameWithTime() string {
 	return fmt.Sprintf("IR_%s_%s.csv",
 		p.CustomerCode,
 		time.Now().Format("20060102_150405"))

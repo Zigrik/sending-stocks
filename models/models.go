@@ -4,9 +4,9 @@ package models
 type StockItem struct {
 	RowNum          int     `json:"row_num"`          // номер строки
 	Name            string  `json:"name"`             // столбец A - наименование
-	Brand           string  `json:"brand"`            // столбец B - бренд (с сезоном)
-	Code1C          string  `json:"code_1c"`          // столбец F - код в 1С
-	ManufacturerSKU string  `json:"manufacturer_sku"` // столбец G - код производителя
+	Brand           string  `json:"brand"`            // столбец C - бренд (с сезоном)
+	Code1C          string  `json:"code_1c"`          // столбец F - код в 1С (только цифры)
+	ManufacturerSKU string  `json:"manufacturer_sku"` // столбец G - код производителя (только цифры)
 	TireSize        string  `json:"tire_size"`        // столбец H - типоразмер
 	Quantity        int     `json:"quantity"`         // столбец I - остаток
 	Price           float64 `json:"price"`            // столбец J - цена

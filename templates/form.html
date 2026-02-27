@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Загрузка остатков - Pirelli</title>
+    <title>Загрузка остатков - Pirelli & Ikon</title>
     <style>
         * {
             margin: 0;
@@ -32,6 +32,7 @@
             padding: 30px;
             text-align: center;
             border-bottom: 1px solid #dee2e6;
+            position: relative;
         }
         
         .header h1 {
@@ -41,6 +42,23 @@
         
         .header p {
             color: #666;
+        }
+        
+        .clear-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .clear-btn:hover {
+            background: #c82333;
         }
         
         .content {
@@ -58,8 +76,13 @@
             font-weight: 500;
         }
         
+        .password-container {
+            display: flex;
+            gap: 10px;
+        }
+        
         input[type="password"] {
-            width: 100%;
+            flex: 1;
             padding: 12px;
             border: 2px solid #dee2e6;
             border-radius: 8px;
@@ -70,6 +93,30 @@
         input[type="password"]:focus {
             outline: none;
             border-color: #667eea;
+        }
+        
+        input[type="password"].error {
+            border-color: #dc3545;
+            background-color: #fff8f8;
+        }
+        
+        .check-btn {
+            padding: 12px 24px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .check-btn:hover {
+            background: #218838;
+        }
+        
+        .check-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
         
         .upload-area {
@@ -84,6 +131,11 @@
         .upload-area:hover {
             border-color: #667eea;
             background: #f8f9ff;
+        }
+        
+        .upload-area.disabled {
+            opacity: 0.5;
+            pointer-events: none;
         }
         
         .upload-icon {
@@ -110,6 +162,11 @@
         
         .browse-btn:hover {
             background: #5a6fd8;
+        }
+        
+        .browse-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
         
         #fileInput {
@@ -181,10 +238,41 @@
             margin-left: 10px;
         }
         
+        .ikon-section {
+            background: #e8f5e9;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .ikon-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        .ikon-title span {
+            background: #28a745;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+        
+        .note {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+            font-style: italic;
+        }
+        
         .actions {
             display: flex;
             gap: 15px;
             margin-top: 20px;
+            flex-wrap: wrap;
         }
         
         button {
@@ -229,6 +317,15 @@
             background: #138496;
         }
         
+        .btn-warning {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        .btn-warning:hover {
+            background: #e0a800;
+        }
+        
         .result {
             margin-top: 20px;
             padding: 15px;
@@ -246,6 +343,12 @@
             background: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
         }
         
         .table-container {
@@ -319,28 +422,40 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            padding-bottom: 20px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Загрузка остатков Pirelli</h1>
-            <p>Загрузите файл из 1С для отправки в систему Pirelli</p>
+            <h1>Загрузка остатков</h1>
+            <p>Загрузите файл из 1С для формирования отчетов</p>
+            <button class="clear-btn" onclick="clearAll()" id="clearBtn">🗑️ Очистить память</button>
         </div>
         
         <div class="content">
             <div class="form-group">
                 <label for="password">Пароль</label>
-                <input type="password" id="password" placeholder="Введите пароль">
+                <div class="password-container">
+                    <input type="password" id="password" placeholder="Введите пароль" oninput="clearPasswordError()">
+                    <button class="check-btn" onclick="checkPassword()" id="checkPasswordBtn">Проверить</button>
+                </div>
+                <div id="passwordError" style="color: #dc3545; font-size: 14px; margin-top: 5px; display: none;"></div>
+                <div id="passwordSuccess" style="color: #28a745; font-size: 14px; margin-top: 5px; display: none;">✓ Пароль принят</div>
             </div>
             
-            <div class="upload-area" id="uploadArea">
+            <div class="upload-area" id="uploadArea" onclick="triggerFileSelect()">
                 <div class="upload-icon">📁</div>
-                <div class="upload-text">Перетащите CSV файл сюда или нажмите для выбора</div>
-                <button class="browse-btn" onclick="document.getElementById('fileInput').click()">
-                    Выбрать файл
-                </button>
-                <input type="file" id="fileInput" accept=".xlsx">
+                <div class="upload-text">Перетащите XLSX файл сюда или нажмите для выбора</div>
+                <button class="browse-btn" id="browseBtn" disabled>Выбрать файл</button>
+                <input type="file" id="fileInput" accept=".xlsx" disabled>
             </div>
             
             <div class="file-info" id="fileInfo">
@@ -358,12 +473,31 @@
                     </div>
                     
                     <div class="actions">
-                        <button class="btn-info" id="downloadBtn" onclick="downloadPirelli()" disabled>
+                        <button class="btn-info" id="downloadPirelliBtn" onclick="downloadPirelli()" disabled>
                             📥 Скачать CSV
                         </button>
-                        <button class="btn-success" id="sendBtn" onclick="sendToPirelli()" disabled>
+                        <button class="btn-success" id="sendPirelliBtn" onclick="sendToPirelli()" disabled>
                             📤 Отправить в Pirelli
                         </button>
+                    </div>
+                </div>
+                
+                <div class="ikon-section">
+                    <div class="ikon-title">
+                        Ikon Group Report
+                        <span id="ikonTotal">0</span>
+                    </div>
+                    
+                    <div class="actions">
+                        <button class="btn-info" id="downloadIkonBtn" onclick="downloadIkon()" disabled>
+                            📥 Скачать Excel
+                        </button>
+                        <button class="btn-success" id="sendIkonBtn" onclick="sendIkon()" disabled>
+                            📤 Отправить (SMTP заглушка)
+                        </button>
+                    </div>
+                    <div class="note">
+                        * SMTP отправка будет реализована позже
                     </div>
                 </div>
                 
@@ -374,10 +508,11 @@
                                 <th>Бренд</th>
                                 <th>Сезон</th>
                                 <th>Код 1С</th>
-                                <th>Код Pirelli</th>
+                                <th>Код производителя</th>
                                 <th>Наименование</th>
                                 <th>Типоразмер</th>
                                 <th>Остаток</th>
+                                <th>Цена</th>
                                 <th>Годовой</th>
                             </tr>
                         </thead>
@@ -388,11 +523,112 @@
             
             <div class="result" id="result"></div>
         </div>
+        
+        <div class="footer">
+            <p>Версия 1.0.0</p>
+        </div>
     </div>
 
     <script>
         let currentFile = null;
         let processedData = null;
+        let isPasswordValid = false;
+        
+        // Сбрасываем все состояния при загрузке
+        window.onload = function() {
+            resetState();
+        };
+        
+        function resetState() {
+            isPasswordValid = false;
+            document.getElementById('password').classList.remove('error');
+            document.getElementById('passwordError').style.display = 'none';
+            document.getElementById('passwordSuccess').style.display = 'none';
+            document.getElementById('browseBtn').disabled = true;
+            document.getElementById('fileInput').disabled = true;
+            document.getElementById('uploadArea').classList.add('disabled');
+            currentFile = null;
+            processedData = null;
+            document.getElementById('processingArea').style.display = 'none';
+            document.getElementById('fileInfo').style.display = 'none';
+        }
+        
+        function clearPasswordError() {
+            document.getElementById('password').classList.remove('error');
+            document.getElementById('passwordError').style.display = 'none';
+            document.getElementById('passwordSuccess').style.display = 'none';
+        }
+        
+        async function checkPassword() {
+            const password = document.getElementById('password').value;
+            
+            if (!password) {
+                showPasswordError('Введите пароль');
+                return;
+            }
+            
+            // Показываем индикатор загрузки на кнопке
+            const checkBtn = document.getElementById('checkPasswordBtn');
+            const originalText = checkBtn.textContent;
+            checkBtn.textContent = 'Проверка...';
+            checkBtn.disabled = true;
+            
+            showLoading('Проверка пароля...');
+            
+            try {
+                const response = await fetch('/api/check-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ password: password })
+                });
+                
+                const result = await response.json();
+                hideResult();
+                
+                if (result.success) {
+                    // Пароль верный
+                    isPasswordValid = true;
+                    document.getElementById('password').classList.remove('error');
+                    document.getElementById('passwordError').style.display = 'none';
+                    document.getElementById('passwordSuccess').style.display = 'block';
+                    document.getElementById('browseBtn').disabled = false;
+                    document.getElementById('fileInput').disabled = false;
+                    document.getElementById('uploadArea').classList.remove('disabled');
+                    showResult('Пароль принят', true);
+                } else {
+                    // Пароль неверный
+                    isPasswordValid = false;
+                    showPasswordError('Неверный пароль');
+                    document.getElementById('browseBtn').disabled = true;
+                    document.getElementById('fileInput').disabled = true;
+                    document.getElementById('uploadArea').classList.add('disabled');
+                    showResult('Неверный пароль', false);
+                }
+            } catch (error) {
+                showResult('Ошибка при проверке пароля: ' + error.message, false);
+                console.error('Ошибка:', error);
+            } finally {
+                // Восстанавливаем кнопку
+                checkBtn.textContent = originalText;
+                checkBtn.disabled = false;
+            }
+        }
+        
+        function showPasswordError(message) {
+            document.getElementById('password').classList.add('error');
+            document.getElementById('passwordSuccess').style.display = 'none';
+            const errorDiv = document.getElementById('passwordError');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+        
+        function triggerFileSelect() {
+            if (isPasswordValid) {
+                document.getElementById('fileInput').click();
+            }
+        }
         
         // Drag & drop
         const uploadArea = document.getElementById('uploadArea');
@@ -415,7 +651,9 @@
         });
         
         function highlight() {
-            uploadArea.classList.add('hover');
+            if (isPasswordValid) {
+                uploadArea.classList.add('hover');
+            }
         }
         
         function unhighlight() {
@@ -425,13 +663,19 @@
         uploadArea.addEventListener('drop', handleDrop, false);
         
         function handleDrop(e) {
+            if (!isPasswordValid) {
+                showResult('Сначала введите пароль', false);
+                return;
+            }
             const dt = e.dataTransfer;
             const files = dt.files;
             handleFiles(files);
         }
         
         document.getElementById('fileInput').addEventListener('change', function(e) {
-            handleFiles(this.files);
+            if (isPasswordValid) {
+                handleFiles(this.files);
+            }
         });
         
         function handleFiles(files) {
@@ -448,10 +692,6 @@
         
         async function uploadFile(file) {
             const password = document.getElementById('password').value;
-            if (!password) {
-                showResult('Введите пароль', false);
-                return;
-            }
             
             showLoading('Загрузка файла...');
             
@@ -476,9 +716,17 @@
                     await processFile(currentFile);
                 } else {
                     showResult(result.message, false);
+                    if (result.message.includes('пароль')) {
+                        showPasswordError('Неверный пароль');
+                        isPasswordValid = false;
+                        document.getElementById('browseBtn').disabled = true;
+                        document.getElementById('fileInput').disabled = true;
+                        document.getElementById('uploadArea').classList.add('disabled');
+                    }
                 }
             } catch (error) {
                 showResult('Ошибка: ' + error.message, false);
+                console.error('Ошибка загрузки:', error);
             }
         }
         
@@ -511,6 +759,7 @@
                 }
             } catch (error) {
                 showResult('Ошибка: ' + error.message, false);
+                console.error('Ошибка обработки:', error);
             }
         }
         
@@ -539,22 +788,39 @@
             const pirelliItems = data.pirelli_items || [];
             document.getElementById('pirelliCount').textContent = pirelliItems.length;
             
-            const downloadBtn = document.getElementById('downloadBtn');
-            const sendBtn = document.getElementById('sendBtn');
+            const downloadPirelliBtn = document.getElementById('downloadPirelliBtn');
+            const sendPirelliBtn = document.getElementById('sendPirelliBtn');
             
             if (pirelliItems.length > 0) {
-                downloadBtn.disabled = false;
-                sendBtn.disabled = false;
+                downloadPirelliBtn.disabled = false;
+                sendPirelliBtn.disabled = false;
             } else {
-                downloadBtn.disabled = true;
-                sendBtn.disabled = true;
+                downloadPirelliBtn.disabled = true;
+                sendPirelliBtn.disabled = true;
+            }
+            
+            // Ikon - активируем кнопки если есть данные
+            const allItems = data.all_items || [];
+            const downloadIkonBtn = document.getElementById('downloadIkonBtn');
+            const sendIkonBtn = document.getElementById('sendIkonBtn');
+            const ikonTotal = document.getElementById('ikonTotal');
+            
+            // Подсчитываем общее количество для Ikon (просто для информации)
+            const totalQuantity = allItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+            ikonTotal.textContent = totalQuantity;
+            
+            if (allItems.length > 0) {
+                downloadIkonBtn.disabled = false;
+                sendIkonBtn.disabled = false;
+            } else {
+                downloadIkonBtn.disabled = true;
+                sendIkonBtn.disabled = true;
             }
             
             // Таблица
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = '';
             
-            const allItems = data.all_items || [];
             allItems.forEach(item => {
                 const row = tbody.insertRow();
                 
@@ -586,6 +852,9 @@
                 
                 // Остаток
                 row.insertCell().textContent = item.quantity || 0;
+                
+                // Цена
+                row.insertCell().textContent = item.price ? item.price.toFixed(2) : '-';
                 
                 // Годовой
                 const yearCell = row.insertCell();
@@ -646,6 +915,101 @@
                 }
             } catch (error) {
                 showResult('Ошибка: ' + error.message, false);
+                console.error('Ошибка отправки:', error);
+            }
+        }
+        
+        async function downloadIkon() {
+            const password = document.getElementById('password').value;
+            window.location.href = `/api/download-ikon?password=${password}&file=${processedData.filename}`;
+        }
+        
+        async function sendIkon() {
+            const password = document.getElementById('password').value;
+            const email = prompt('Введите email для отправки (заглушка):', 'test@example.com');
+            
+            if (!email) return;
+            
+            showLoading('Подготовка к отправке...');
+            
+            try {
+                const response = await fetch('/api/send-ikon', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        password: password,
+                        filename: processedData.filename,
+                        email: email
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    let message = result.message;
+                    if (result.data && result.data.message) {
+                        message += ` (${result.data.message})`;
+                    }
+                    showResult(message, true);
+                } else {
+                    showResult(result.message, false);
+                }
+            } catch (error) {
+                showResult('Ошибка: ' + error.message, false);
+                console.error('Ошибка отправки Ikon:', error);
+            }
+        }
+        
+        async function clearAll() {
+            const password = document.getElementById('password').value;
+            
+            if (!password) {
+                showResult('Введите пароль', false);
+                return;
+            }
+            
+            if (!confirm('Вы уверены? Будут удалены все загруженные и обработанные файлы.')) {
+                return;
+            }
+            
+            showLoading('Очистка...');
+            
+            try {
+                const response = await fetch('/api/clear', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ password: password })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Сбрасываем состояние
+                    resetState();
+                    document.getElementById('fileInfo').style.display = 'none';
+                    document.getElementById('processingArea').style.display = 'none';
+                    document.getElementById('password').value = '';
+                    
+                    let message = result.message;
+                    if (result.data) {
+                        message += ` (загрузок: ${result.data.upload_removed}, обработанных: ${result.data.processed_removed})`;
+                    }
+                    showResult(message, true);
+                    
+                    console.log('Очистка выполнена:', result.data);
+                } else {
+                    showResult(result.message, false);
+                    if (result.message.includes('пароль')) {
+                        showPasswordError('Неверный пароль');
+                    }
+                }
+            } catch (error) {
+                showResult('Ошибка при очистке: ' + error.message, false);
+                console.error('Ошибка очистки:', error);
             }
         }
         
@@ -667,6 +1031,10 @@
                     result.style.display = 'none';
                 }, 5000);
             }
+        }
+        
+        function hideResult() {
+            document.getElementById('result').style.display = 'none';
         }
     </script>
 </body>
