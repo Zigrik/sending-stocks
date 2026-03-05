@@ -20,14 +20,19 @@ import (
 
 // UploadHandler обработчик загрузки
 type UploadHandler struct {
-	adminPassword    string
-	uploadDir        string
-	processedDir     string
-	customerCode     string
-	parser           *processors.StockParser
-	pirelliAPI       *services.PirelliAPIService
-	pirelliProcessor *processors.PirelliProcessor
-	ikonProcessor    *processors.IkonProcessor // Добавлено поле для IkonProcessor
+	adminPassword         string
+	uploadDir             string
+	processedDir          string
+	customerCode          string
+	pirelliBrands         []string
+	cordiantBrands        []string
+	parser                *processors.StockParser
+	pirelliAPI            *services.PirelliAPIService
+	cordiantAPI           *services.CordiantAPIService
+	pirelliProcessor      *processors.PirelliProcessor
+	ikonProcessor         *processors.IkonProcessor
+	pirelliExcelProcessor *processors.PirelliExcelProcessor
+	cordiantProcessor     *processors.CordiantProcessor
 }
 
 // NewUploadHandler создает новый обработчик
@@ -36,19 +41,29 @@ func NewUploadHandler(
 	uploadDir string,
 	processedDir string,
 	customerCode string,
+	pirelliBrands []string,
+	cordiantBrands []string,
 	parser *processors.StockParser,
-	api *services.PirelliAPIService,
-	ikonProc *processors.IkonProcessor, // Добавляем IkonProcessor
+	pirelliAPI *services.PirelliAPIService,
+	cordiantAPI *services.CordiantAPIService,
+	ikonProc *processors.IkonProcessor,
+	pirelliExcelProc *processors.PirelliExcelProcessor,
+	cordiantProc *processors.CordiantProcessor,
 ) *UploadHandler {
 	return &UploadHandler{
-		adminPassword:    adminPassword,
-		uploadDir:        uploadDir,
-		processedDir:     processedDir,
-		customerCode:     customerCode,
-		parser:           parser,
-		pirelliAPI:       api,
-		pirelliProcessor: processors.NewPirelliProcessor(customerCode),
-		ikonProcessor:    ikonProc, // Сохраняем IkonProcessor
+		adminPassword:         adminPassword,
+		uploadDir:             uploadDir,
+		processedDir:          processedDir,
+		customerCode:          customerCode,
+		pirelliBrands:         pirelliBrands,
+		cordiantBrands:        cordiantBrands,
+		parser:                parser,
+		pirelliAPI:            pirelliAPI,
+		cordiantAPI:           cordiantAPI,
+		pirelliProcessor:      processors.NewPirelliProcessor(customerCode),
+		ikonProcessor:         ikonProc,
+		pirelliExcelProcessor: pirelliExcelProc,
+		cordiantProcessor:     cordiantProc,
 	}
 }
 
@@ -194,8 +209,8 @@ func (h *UploadHandler) HandleProcess(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, true, "Файл обработан", processed, http.StatusOK)
 }
 
-// HandleDownloadPirelli скачивает CSV файл для Pirelli
-func (h *UploadHandler) HandleDownloadPirelli(w http.ResponseWriter, r *http.Request) {
+// HandleDownloadPirelliCSV скачивает CSV файл для Pirelli (только с SKU)
+func (h *UploadHandler) HandleDownloadPirelliCSV(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 		return
@@ -205,7 +220,7 @@ func (h *UploadHandler) HandleDownloadPirelli(w http.ResponseWriter, r *http.Req
 	filename := r.URL.Query().Get("file")
 
 	if password != h.adminPassword {
-		log.Println("Ошибка скачивания Pirelli: неверный пароль")
+		log.Println("Ошибка скачивания Pirelli CSV: неверный пароль")
 		http.Error(w, "Неверный пароль", http.StatusUnauthorized)
 		return
 	}
@@ -244,7 +259,7 @@ func (h *UploadHandler) HandleDownloadPirelli(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	log.Printf("Скачан файл Pirelli: %s", downloadFilename)
+	log.Printf("Скачан файл Pirelli CSV: %s", downloadFilename)
 }
 
 // HandleSendPirelli отправляет CSV файл в Pirelli через API
@@ -338,6 +353,132 @@ func (h *UploadHandler) HandleSendPirelli(w http.ResponseWriter, r *http.Request
 	}
 
 	sendJSON(w, response.Status, response.Message, response, http.StatusOK)
+}
+
+// HandleDownloadPirelliExcel скачивает Excel отчет для Pirelli (все позиции)
+func (h *UploadHandler) HandleDownloadPirelliExcel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	password := r.URL.Query().Get("password")
+	filename := r.URL.Query().Get("file")
+
+	if password != h.adminPassword {
+		log.Println("Ошибка скачивания Pirelli Excel: неверный пароль")
+		http.Error(w, "Неверный пароль", http.StatusUnauthorized)
+		return
+	}
+
+	// Загружаем обработанные данные
+	resultPath := filepath.Join(h.processedDir, filename)
+	data, err := os.ReadFile(resultPath)
+	if err != nil {
+		log.Printf("Файл не найден: %s", filename)
+		http.Error(w, "Файл не найден", http.StatusNotFound)
+		return
+	}
+
+	var processed models.ProcessedFile
+	if err := json.Unmarshal(data, &processed); err != nil {
+		log.Printf("Ошибка чтения данных из %s: %v", filename, err)
+		http.Error(w, "Ошибка чтения данных", http.StatusInternalServerError)
+		return
+	}
+
+	if h.pirelliExcelProcessor == nil {
+		log.Println("Ошибка: процессор Pirelli Excel не инициализирован")
+		http.Error(w, "Процессор Pirelli Excel не настроен", http.StatusInternalServerError)
+		return
+	}
+
+	// Создаем Excel отчет
+	f, err := h.pirelliExcelProcessor.CreateExcelReport(processed.AllItems)
+	if err != nil {
+		log.Printf("Ошибка создания отчета Pirelli Excel: %v", err)
+		http.Error(w, "Ошибка создания отчета", http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	// Сохраняем во временный файл
+	tmpFile, err := os.CreateTemp("", "pirelli-excel-*.xlsx")
+	if err != nil {
+		log.Printf("Ошибка создания временного файла: %v", err)
+		http.Error(w, "Ошибка создания файла", http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	if err := f.SaveAs(tmpFile.Name()); err != nil {
+		log.Printf("Ошибка сохранения Excel: %v", err)
+		http.Error(w, "Ошибка сохранения файла", http.StatusInternalServerError)
+		return
+	}
+
+	// Отправляем файл
+	downloadFilename := h.pirelliExcelProcessor.GenerateFilename()
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=%s", downloadFilename))
+
+	http.ServeFile(w, r, tmpFile.Name())
+
+	log.Printf("Скачан отчет Pirelli Excel: %s", downloadFilename)
+}
+
+// HandleSendPirelliExcel заглушка для отправки по SMTP
+func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+		Filename string `json:"filename"`
+		Email    string `json:"email,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Ошибка парсинга запроса send-pirelli-excel: %v", err)
+		sendJSON(w, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
+		return
+	}
+
+	if req.Password != h.adminPassword {
+		log.Println("Ошибка отправки Pirelli Excel: неверный пароль")
+		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		return
+	}
+
+	// Загружаем обработанные данные
+	resultPath := filepath.Join(h.processedDir, req.Filename)
+	data, err := os.ReadFile(resultPath)
+	if err != nil {
+		log.Printf("Файл не найден: %s", req.Filename)
+		sendJSON(w, false, "Файл не найден", nil, http.StatusNotFound)
+		return
+	}
+
+	var processed models.ProcessedFile
+	if err := json.Unmarshal(data, &processed); err != nil {
+		log.Printf("Ошибка чтения данных из %s: %v", req.Filename, err)
+		sendJSON(w, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// TODO: Реализовать отправку по SMTP
+	log.Printf("ЗАГЛУШКА: отправка отчета Pirelli Excel по SMTP на %s", req.Email)
+
+	// Для демонстрации возвращаем успех
+	sendJSON(w, true, "Отчет готов к отправке (SMTP заглушка)", map[string]interface{}{
+		"email":   req.Email,
+		"items":   len(processed.AllItems),
+		"message": "Функция отправки будет реализована позже",
+	}, http.StatusOK)
 }
 
 // HandleDownloadIkon скачивает Excel отчет для Ikon
@@ -540,4 +681,162 @@ func sendJSON(w http.ResponseWriter, success bool, message string, data interfac
 		Message: message,
 		Data:    data,
 	})
+}
+
+// HandleDownloadCordiantCSV скачивает CSV файл для Cordiant
+func (h *UploadHandler) HandleDownloadCordiantCSV(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	password := r.URL.Query().Get("password")
+	filename := r.URL.Query().Get("file")
+
+	if password != h.adminPassword {
+		log.Println("Ошибка скачивания Cordiant CSV: неверный пароль")
+		http.Error(w, "Неверный пароль", http.StatusUnauthorized)
+		return
+	}
+
+	// Загружаем обработанные данные
+	resultPath := filepath.Join(h.processedDir, filename)
+	data, err := os.ReadFile(resultPath)
+	if err != nil {
+		log.Printf("Файл не найден: %s", filename)
+		http.Error(w, "Файл не найден", http.StatusNotFound)
+		return
+	}
+
+	var processed models.ProcessedFile
+	if err := json.Unmarshal(data, &processed); err != nil {
+		log.Printf("Ошибка чтения данных из %s: %v", filename, err)
+		http.Error(w, "Ошибка чтения данных", http.StatusInternalServerError)
+		return
+	}
+
+	if h.cordiantProcessor == nil {
+		log.Println("Ошибка: процессор Cordiant не инициализирован")
+		http.Error(w, "Процессор Cordiant не настроен", http.StatusInternalServerError)
+		return
+	}
+
+	// Фильтруем позиции для Cordiant
+	cordiantItems := h.cordiantProcessor.FilterItems(processed.AllItems)
+
+	if len(cordiantItems) == 0 {
+		log.Printf("Нет данных Cordiant в файле %s", filename)
+		http.Error(w, "Нет данных Cordiant для скачивания", http.StatusNotFound)
+		return
+	}
+
+	// Создаем CSV
+	csvData, err := h.cordiantProcessor.CreateCSVWithEncoding(cordiantItems, "windows-1251")
+	if err != nil {
+		log.Printf("Ошибка создания CSV: %v", err)
+		http.Error(w, "Ошибка создания CSV", http.StatusInternalServerError)
+		return
+	}
+
+	// Отправляем файл
+	downloadFilename := h.cordiantProcessor.GenerateFilename()
+	w.Header().Set("Content-Type", "text/csv; charset=windows-1251")
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=%s", downloadFilename))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(csvData)))
+
+	if _, err := w.Write(csvData); err != nil {
+		log.Printf("Ошибка отправки файла: %v", err)
+	}
+
+	log.Printf("Скачан файл Cordiant CSV: %s, позиций: %d", downloadFilename, len(cordiantItems))
+}
+
+// HandleSendCordiant отправляет отчет в Cordiant через API
+func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+		Filename string `json:"filename"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Ошибка парсинга запроса send-cordiant: %v", err)
+		sendJSON(w, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
+		return
+	}
+
+	if req.Password != h.adminPassword {
+		log.Println("Ошибка отправки Cordiant: неверный пароль")
+		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		return
+	}
+
+	if h.cordiantAPI == nil {
+		log.Println("Ошибка отправки: API Cordiant не настроен")
+		sendJSON(w, false, "API Cordiant не настроен", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Загружаем обработанные данные
+	resultPath := filepath.Join(h.processedDir, req.Filename)
+	data, err := os.ReadFile(resultPath)
+	if err != nil {
+		log.Printf("Файл не найден: %s", req.Filename)
+		sendJSON(w, false, "Файл не найден", nil, http.StatusNotFound)
+		return
+	}
+
+	var processed models.ProcessedFile
+	if err := json.Unmarshal(data, &processed); err != nil {
+		log.Printf("Ошибка чтения данных из %s: %v", req.Filename, err)
+		sendJSON(w, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
+		return
+	}
+
+	if h.cordiantProcessor == nil {
+		log.Println("Ошибка: процессор Cordiant не инициализирован")
+		sendJSON(w, false, "Процессор Cordiant не настроен", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Фильтруем позиции для Cordiant
+	cordiantItems := h.cordiantProcessor.FilterItems(processed.AllItems)
+
+	if len(cordiantItems) == 0 {
+		log.Printf("Нет данных Cordiant в файле %s", req.Filename)
+		sendJSON(w, false, "Нет данных Cordiant для отправки", nil, http.StatusBadRequest)
+		return
+	}
+
+	// Подготавливаем файл в base64
+	fileBase64, err := h.cordiantProcessor.PrepareBase64File(cordiantItems)
+	if err != nil {
+		log.Printf("Ошибка подготовки файла: %v", err)
+		sendJSON(w, false, "Ошибка подготовки файла: "+err.Error(), nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Получаем текущий год и месяц
+	year, month := h.cordiantProcessor.GetCurrentYearMonth()
+
+	// Отправляем в Cordiant
+	response, err := h.cordiantAPI.SendReport(fileBase64, year, month)
+	if err != nil {
+		log.Printf("Ошибка отправки в Cordiant: %v", err)
+		sendJSON(w, false, "Ошибка отправки: "+err.Error(), nil, http.StatusInternalServerError)
+		return
+	}
+
+	if response.Success {
+		log.Printf("Отчет успешно отправлен в Cordiant, позиций: %d", len(cordiantItems))
+	} else {
+		log.Printf("Ошибка отправки в Cordiant: %s", response.Message)
+	}
+
+	sendJSON(w, response.Success, response.Message, response.Data, http.StatusOK)
 }

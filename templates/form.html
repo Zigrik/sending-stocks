@@ -466,23 +466,31 @@
             <div id="processingArea" style="display: none;">
                 <div class="stats" id="stats"></div>
                 
-                <div class="pirelli-section">
+                <div class="pirelli-section" style="background: #ffebee;"> <!-- Красный фон -->
                     <div class="pirelli-title">
                         Pirelli / Formula
                         <span id="pirelliCount">0</span>
                     </div>
                     
                     <div class="actions">
-                        <button class="btn-info" id="downloadPirelliBtn" onclick="downloadPirelli()" disabled>
-                            📥 Скачать CSV
+                        <button class="btn-info" id="downloadPirelliCSVBtn" onclick="downloadPirelliCSV()" disabled>
+                            📥 Скачать CSV (с SKU)
                         </button>
                         <button class="btn-success" id="sendPirelliBtn" onclick="sendToPirelli()" disabled>
                             📤 Отправить в Pirelli
                         </button>
                     </div>
+                    <div class="actions" style="margin-top: 10px;">
+                        <button class="btn-info" id="downloadPirelliExcelBtn" onclick="downloadPirelliExcel()" disabled>
+                            📥 Скачать Excel (все позиции)
+                        </button>
+                        <button class="btn-success" id="sendPirelliExcelBtn" onclick="sendPirelliExcel()" disabled>
+                            📤 Отправить Excel (SMTP заглушка)
+                        </button>
+                    </div>
                 </div>
-                
-                <div class="ikon-section">
+
+                <div class="ikon-section" style="background: #e8f5e9;"> <!-- Зеленый фон -->
                     <div class="ikon-title">
                         Ikon Group Report
                         <span id="ikonTotal">0</span>
@@ -498,6 +506,23 @@
                     </div>
                     <div class="note">
                         * SMTP отправка будет реализована позже
+                    </div>
+                </div>
+
+                <!-- Cordiant секция - синий фон -->
+                <div class="cordiant-section" style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <div style="font-size: 18px; font-weight: 600; color: #333; margin-bottom: 15px;">
+                        Cordiant Group (Cordiant, Gislaved, Torero, Tunga)
+                        <span id="cordiantCount" style="background: #2196f3; color: white; padding: 3px 10px; border-radius: 20px; font-size: 14px; margin-left: 10px;">0</span>
+                    </div>
+                    
+                    <div class="actions">
+                        <button class="btn-info" id="downloadCordiantBtn" onclick="downloadCordiant()" disabled style="background: #2196f3;">
+                            📥 Скачать CSV
+                        </button>
+                        <button class="btn-success" id="sendCordiantBtn" onclick="sendCordiant()" disabled style="background: #1976d2;">
+                            📤 Отправить в API
+                        </button>
                     </div>
                 </div>
                 
@@ -788,15 +813,33 @@
             const pirelliItems = data.pirelli_items || [];
             document.getElementById('pirelliCount').textContent = pirelliItems.length;
             
-            const downloadPirelliBtn = document.getElementById('downloadPirelliBtn');
+            const downloadPirelliCSVBtn = document.getElementById('downloadPirelliCSVBtn');
             const sendPirelliBtn = document.getElementById('sendPirelliBtn');
+            const downloadPirelliExcelBtn = document.getElementById('downloadPirelliExcelBtn');
+            const sendPirelliExcelBtn = document.getElementById('sendPirelliExcelBtn');
             
+            // CSV и отправка в API доступны только при наличии позиций с SKU
             if (pirelliItems.length > 0) {
-                downloadPirelliBtn.disabled = false;
+                downloadPirelliCSVBtn.disabled = false;
                 sendPirelliBtn.disabled = false;
             } else {
-                downloadPirelliBtn.disabled = true;
+                downloadPirelliCSVBtn.disabled = true;
                 sendPirelliBtn.disabled = true;
+            }
+
+            const allPirelliItems = data.all_items.filter(item => 
+                item.clean_brand && (
+                    item.clean_brand.toLowerCase().includes('pirelli') || 
+                    item.clean_brand.toLowerCase().includes('formula')
+                ) && item.quantity > 0
+            );
+            
+            if (allPirelliItems.length > 0) {
+                downloadPirelliExcelBtn.disabled = false;
+                sendPirelliExcelBtn.disabled = false;
+            } else {
+                downloadPirelliExcelBtn.disabled = true;
+                sendPirelliExcelBtn.disabled = true;
             }
             
             // Ikon - активируем кнопки если есть данные
@@ -817,6 +860,28 @@
                 sendIkonBtn.disabled = true;
             }
             
+            // Cordiant - подсчитываем позиции с ManufacturerSKU
+            const allItems = data.all_items || [];
+            const cordiantItems = allItems.filter(item => {
+                const brand = (item.clean_brand || '').toLowerCase();
+                return (brand.includes('cordiant') || brand.includes('gislaved') || 
+                        brand.includes('torero') || brand.includes('tunga')) && 
+                        item.quantity > 0 && item.manufacturer_sku;
+            });
+            
+            document.getElementById('cordiantCount').textContent = cordiantItems.length;
+            
+            const downloadCordiantBtn = document.getElementById('downloadCordiantBtn');
+            const sendCordiantBtn = document.getElementById('sendCordiantBtn');
+            
+            if (cordiantItems.length > 0) {
+                downloadCordiantBtn.disabled = false;
+                sendCordiantBtn.disabled = false;
+            } else {
+                downloadCordiantBtn.disabled = true;
+                sendCordiantBtn.disabled = true;
+            }
+
             // Таблица
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = '';
@@ -879,9 +944,49 @@
             }
         }
         
-        async function downloadPirelli() {
+        async function downloadPirelliExcel() {
             const password = document.getElementById('password').value;
-            window.location.href = `/api/download-pirelli?password=${password}&file=${processedData.filename}`;
+            window.location.href = `/api/download-pirelli-excel?password=${password}&file=${processedData.filename}`;
+        }
+
+        async function sendPirelliExcel() {
+            const password = document.getElementById('password').value;
+            const email = prompt('Введите email для отправки (заглушка):', 'test@example.com');
+            
+            if (!email) return;
+            
+            showLoading('Подготовка к отправке...');
+            
+            try {
+                const response = await fetch('/api/send-pirelli-excel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        password: password,
+                        filename: processedData.filename,
+                        email: email
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showResult(result.message, true);
+                } else {
+                    showResult(result.message, false);
+                }
+            } catch (error) {
+                showResult('Ошибка: ' + error.message, false);
+                console.error('Ошибка отправки Pirelli Excel:', error);
+            }
+        }
+
+        // Переименовываем старую функцию downloadPirelli в downloadPirelliCSV
+        async function downloadPirelliCSV() {
+            const password = document.getElementById('password').value;
+            window.location.href = `/api/download-pirelli-csv?password=${password}&file=${processedData.filename}`;
         }
         
         async function sendToPirelli() {
@@ -962,6 +1067,42 @@
             }
         }
         
+        // Функции для Cordiant
+        async function downloadCordiant() {
+            const password = document.getElementById('password').value;
+            window.location.href = `/api/download-cordiant-csv?password=${password}&file=${processedData.filename}`;
+        }
+
+        async function sendCordiant() {
+            const password = document.getElementById('password').value;
+            
+            showLoading('Отправка в Cordiant...');
+            
+            try {
+                const response = await fetch('/api/send-cordiant', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        password: password,
+                        filename: processedData.filename
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showResult('Отчет успешно отправлен в Cordiant', true);
+                } else {
+                    showResult(result.message, false);
+                }
+            } catch (error) {
+                showResult('Ошибка: ' + error.message, false);
+                console.error('Ошибка отправки Cordiant:', error);
+            }
+        }
+
         async function clearAll() {
             const password = document.getElementById('password').value;
             

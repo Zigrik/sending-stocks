@@ -33,11 +33,12 @@ func NewIkonProcessor(companyName string, summerGroups, winterGroups map[string]
 	}
 }
 
-// CalculateSums вычисляет суммы по группам
-func (p *IkonProcessor) CalculateSums(items []models.StockItem) (map[string]int, map[string]int, int) {
+// CalculateSums вычисляет суммы по группам и общую сумму всех остатков
+func (p *IkonProcessor) CalculateSums(items []models.StockItem) (map[string]int, map[string]int, int, int) {
 	summerSums := make(map[string]int)
 	winterSums := make(map[string]int)
-	totalSum := 0
+	ikonGroupTotal := 0
+	allBrandsTotal := 0
 
 	// Инициализируем суммы нулями
 	for col := range p.config.SummerGroups {
@@ -54,26 +55,29 @@ func (p *IkonProcessor) CalculateSums(items []models.StockItem) (map[string]int,
 			continue
 		}
 
-		// Проверяем летние группы
+		// Добавляем в общую сумму всех брендов (независимо от группы)
+		allBrandsTotal += item.Quantity
+
+		// Проверяем летние группы (только для отчета Ikon)
 		for col, brands := range p.config.SummerGroups {
 			if p.itemInGroups(item, brands) && item.Season == "лето" {
 				summerSums[col] += item.Quantity
-				totalSum += item.Quantity
+				ikonGroupTotal += item.Quantity
 				break
 			}
 		}
 
-		// Проверяем зимние группы
+		// Проверяем зимние группы (только для отчета Ikon)
 		for col, brands := range p.config.WinterGroups {
 			if p.itemInGroups(item, brands) && item.Season == "зима" {
 				winterSums[col] += item.Quantity
-				totalSum += item.Quantity
+				ikonGroupTotal += item.Quantity
 				break
 			}
 		}
 	}
 
-	return summerSums, winterSums, totalSum
+	return summerSums, winterSums, ikonGroupTotal, allBrandsTotal
 }
 
 // itemInGroups проверяет, относится ли позиция к одной из групп брендов
@@ -101,13 +105,11 @@ func (p *IkonProcessor) CreateReport(items []models.StockItem) (*excelize.File, 
 	index, _ := f.NewSheet("Sheet1")
 	f.SetActiveSheet(index)
 
-	// Заголовки
-	headers := []string{
-		"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L",
-	}
+	// Удаляем лист по умолчанию
+	f.DeleteSheet("Sheet1")
 
-	// Устанавливаем значения
-	f.SetCellValue("Sheet1", "A1", p.config.CompanyName)
+	// Заголовки
+	f.SetCellValue("Sheet1", "A1", "Клиент")
 	f.SetCellValue("Sheet1", "B1", "Summer A")
 	f.SetCellValue("Sheet1", "C1", "Summer B")
 	f.SetCellValue("Sheet1", "D1", "Bars")
@@ -120,8 +122,11 @@ func (p *IkonProcessor) CreateReport(items []models.StockItem) (*excelize.File, 
 	f.SetCellValue("Sheet1", "K1", "TOTAL")
 	f.SetCellValue("Sheet1", "L1", "Все остатки клиента (по всем конкурентам и Нокиан в том числе)")
 
+	// Название компании в A2
+	f.SetCellValue("Sheet1", "A2", p.config.CompanyName)
+
 	// Вычисляем суммы
-	summerSums, winterSums, totalSum := p.CalculateSums(items)
+	summerSums, winterSums, _, allBrandsTotal := p.CalculateSums(items)
 
 	// Заполняем суммы
 	f.SetCellValue("Sheet1", "B2", summerSums["B"])
@@ -143,11 +148,11 @@ func (p *IkonProcessor) CreateReport(items []models.StockItem) (*excelize.File, 
 	totalFormula := "=SUM(F2,J2)"
 	f.SetCellFormula("Sheet1", "K2", totalFormula)
 
-	// L2 - все остатки (можно оставить пустым или тоже формула)
-	f.SetCellValue("Sheet1", "L2", totalSum)
+	// L2 - все остатки по всем брендам (сумма всех Quantity)
+	f.SetCellValue("Sheet1", "L2", allBrandsTotal)
 
-	// Стили
-	style, _ := f.NewStyle(&excelize.Style{
+	// Стили для заголовков
+	headerStyle, _ := f.NewStyle(&excelize.Style{
 		Font: &excelize.Font{
 			Bold: true,
 			Size: 12,
@@ -158,11 +163,33 @@ func (p *IkonProcessor) CreateReport(items []models.StockItem) (*excelize.File, 
 			Pattern: 1,
 		},
 	})
-	f.SetCellStyle("Sheet1", "A1", "L1", style)
+	f.SetCellStyle("Sheet1", "A1", "L1", headerStyle)
+
+	// Стиль для компании
+	companyStyle, _ := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{
+			Bold: true,
+			Size: 11,
+		},
+	})
+	f.SetCellStyle("Sheet1", "A2", "A2", companyStyle)
+
+	// Стиль для чисел (выравнивание по центру)
+	numberStyle, _ := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{
+			Horizontal: "center",
+		},
+	})
+	f.SetCellStyle("Sheet1", "B2", "L2", numberStyle)
 
 	// Устанавливаем ширину колонок
-	for _, col := range headers {
-		f.SetColWidth("Sheet1", col, col, 20)
+	colWidths := map[string]float64{
+		"A": 20, "B": 12, "C": 12, "D": 10, "E": 10,
+		"F": 15, "G": 12, "H": 12, "I": 10, "J": 15,
+		"K": 10, "L": 40,
+	}
+	for col, width := range colWidths {
+		f.SetColWidth("Sheet1", col, col, width)
 	}
 
 	return f, nil
