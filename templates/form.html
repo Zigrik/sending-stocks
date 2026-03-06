@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Загрузка остатков - Pirelli & Ikon</title>
+    <title>Загрузка остатков - Мультибрендовый сервис</title>
     <style>
         * {
             margin: 0;
@@ -181,6 +181,20 @@
             display: none;
         }
         
+        .email-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        
+        .email-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
         .stats {
             background: #f8f9fa;
             padding: 20px;
@@ -215,57 +229,49 @@
             margin-top: 5px;
         }
         
-        .pirelli-section {
-            background: #f0f4ff;
+        .section {
             padding: 20px;
             border-radius: 8px;
             margin: 20px 0;
         }
         
-        .pirelli-title {
+        .section-title {
             font-size: 18px;
             font-weight: 600;
             color: #333;
             margin-bottom: 15px;
         }
         
-        .pirelli-title span {
-            background: #667eea;
+        .section-title span {
             color: white;
             padding: 3px 10px;
             border-radius: 20px;
             font-size: 14px;
             margin-left: 10px;
+        }
+        
+        .pirelli-section {
+            background: #ffebee;
+        }
+        
+        .pirelli-section .section-title span {
+            background: #f44336;
         }
         
         .ikon-section {
             background: #e8f5e9;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
         }
         
-        .ikon-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 15px;
+        .ikon-section .section-title span {
+            background: #4caf50;
         }
         
-        .ikon-title span {
-            background: #28a745;
-            color: white;
-            padding: 3px 10px;
-            border-radius: 20px;
-            font-size: 14px;
-            margin-left: 10px;
+        .cordiant-section {
+            background: #e3f2fd;
         }
         
-        .note {
-            margin-top: 10px;
-            font-size: 12px;
-            color: #666;
-            font-style: italic;
+        .cordiant-section .section-title span {
+            background: #2196f3;
         }
         
         .actions {
@@ -326,29 +332,20 @@
             background: #e0a800;
         }
         
-        .result {
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 8px;
-            display: none;
+        .btn-cordiant {
+            background: #2196f3;
+            color: white;
         }
         
-        .success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+        .btn-cordiant:hover:not(:disabled) {
+            background: #1976d2;
         }
         
-        .error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        
-        .warning {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeeba;
+        .note {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+            font-style: italic;
         }
         
         .table-container {
@@ -430,9 +427,129 @@
             font-size: 14px;
             padding-bottom: 20px;
         }
+
+        /* Toast уведомления */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 350px;
+        }
+
+        .toast {
+            background: white;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            animation: slideIn 0.3s ease;
+            border-left: 4px solid;
+        }
+
+        .toast.success {
+            border-left-color: #28a745;
+        }
+
+        .toast.error {
+            border-left-color: #dc3545;
+        }
+
+        .toast.warning {
+            border-left-color: #ffc107;
+        }
+
+        .toast.info {
+            border-left-color: #17a2b8;
+        }
+
+        .toast-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .toast.success .toast-icon {
+            color: #28a745;
+        }
+
+        .toast.error .toast-icon {
+            color: #dc3545;
+        }
+
+        .toast.warning .toast-icon {
+            color: #ffc107;
+        }
+
+        .toast.info .toast-icon {
+            color: #17a2b8;
+        }
+
+        .toast-content {
+            flex: 1;
+        }
+
+        .toast-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #333;
+        }
+
+        .toast-message {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.4;
+        }
+
+        .toast-close {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            color: #999;
+            padding: 0 4px;
+            flex-shrink: 0;
+        }
+
+        .toast-close:hover {
+            color: #333;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+
+        .toast.hiding {
+            animation: slideOut 0.3s ease forwards;
+        }
     </style>
 </head>
 <body>
+    <!-- Контейнер для toast-уведомлений -->
+    <div class="toast-container" id="toastContainer"></div>
+
     <div class="container">
         <div class="header">
             <h1>Загрузка остатков</h1>
@@ -466,34 +583,46 @@
             <div id="processingArea" style="display: none;">
                 <div class="stats" id="stats"></div>
                 
-                <div class="pirelli-section" style="background: #ffebee;"> <!-- Красный фон -->
-                    <div class="pirelli-title">
+                <!-- Pirelli секция - красный фон -->
+                <div class="section pirelli-section">
+                    <div class="section-title">
                         Pirelli / Formula
                         <span id="pirelliCount">0</span>
+                    </div>
+                    
+                    <div>
+                        <label for="pirelliEmails">Email-адреса для отправки (через запятую):</label>
+                        <input type="text" id="pirelliEmails" class="email-input" placeholder="email1@example.com, email2@example.com">
                     </div>
                     
                     <div class="actions">
                         <button class="btn-info" id="downloadPirelliCSVBtn" onclick="downloadPirelliCSV()" disabled>
                             📥 Скачать CSV (с SKU)
                         </button>
-                        <button class="btn-success" id="sendPirelliBtn" onclick="sendToPirelli()" disabled>
-                            📤 Отправить в Pirelli
+                        <button class="btn-success" id="sendPirelliAPIBtn" onclick="sendPirelliAPI()" disabled>
+                            📤 Отправить в API
                         </button>
                     </div>
                     <div class="actions" style="margin-top: 10px;">
                         <button class="btn-info" id="downloadPirelliExcelBtn" onclick="downloadPirelliExcel()" disabled>
                             📥 Скачать Excel (все позиции)
                         </button>
-                        <button class="btn-success" id="sendPirelliExcelBtn" onclick="sendPirelliExcel()" disabled>
-                            📤 Отправить Excel (SMTP заглушка)
+                        <button class="btn-success" id="sendPirelliEmailBtn" onclick="sendPirelliEmail()" disabled>
+                            📧 Отправить по email
                         </button>
                     </div>
                 </div>
-
-                <div class="ikon-section" style="background: #e8f5e9;"> <!-- Зеленый фон -->
-                    <div class="ikon-title">
+                
+                <!-- Ikon секция - зеленый фон -->
+                <div class="section ikon-section">
+                    <div class="section-title">
                         Ikon Group Report
                         <span id="ikonTotal">0</span>
+                    </div>
+                    
+                    <div>
+                        <label for="ikonEmails">Email-адреса для отправки (через запятую):</label>
+                        <input type="text" id="ikonEmails" class="email-input" placeholder="email1@example.com, email2@example.com">
                     </div>
                     
                     <div class="actions">
@@ -501,26 +630,23 @@
                             📥 Скачать Excel
                         </button>
                         <button class="btn-success" id="sendIkonBtn" onclick="sendIkon()" disabled>
-                            📤 Отправить (SMTP заглушка)
+                            📧 Отправить по email
                         </button>
                     </div>
-                    <div class="note">
-                        * SMTP отправка будет реализована позже
-                    </div>
                 </div>
-
+                
                 <!-- Cordiant секция - синий фон -->
-                <div class="cordiant-section" style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                    <div style="font-size: 18px; font-weight: 600; color: #333; margin-bottom: 15px;">
+                <div class="section cordiant-section">
+                    <div class="section-title">
                         Cordiant Group (Cordiant, Gislaved, Torero, Tunga)
-                        <span id="cordiantCount" style="background: #2196f3; color: white; padding: 3px 10px; border-radius: 20px; font-size: 14px; margin-left: 10px;">0</span>
+                        <span id="cordiantCount">0</span>
                     </div>
                     
                     <div class="actions">
-                        <button class="btn-info" id="downloadCordiantBtn" onclick="downloadCordiant()" disabled style="background: #2196f3;">
+                        <button class="btn-info" id="downloadCordiantBtn" onclick="downloadCordiant()" disabled>
                             📥 Скачать CSV
                         </button>
-                        <button class="btn-success" id="sendCordiantBtn" onclick="sendCordiant()" disabled style="background: #1976d2;">
+                        <button class="btn-success" id="sendCordiantBtn" onclick="sendCordiant()" disabled>
                             📤 Отправить в API
                         </button>
                     </div>
@@ -538,19 +664,17 @@
                                 <th>Типоразмер</th>
                                 <th>Остаток</th>
                                 <th>Цена</th>
-                                <th>Годовой</th>
+                                <th>Отметка</th>
                             </tr>
                         </thead>
                         <tbody id="tableBody"></tbody>
                     </table>
                 </div>
             </div>
-            
-            <div class="result" id="result"></div>
         </div>
         
         <div class="footer">
-            <p>Версия 1.0.0</p>
+            <p>Версия 0.3.1</p>
         </div>
     </div>
 
@@ -559,10 +683,82 @@
         let processedData = null;
         let isPasswordValid = false;
         
+        // Email-адреса из .env (заполняются сервером)
+        const defaultPirelliEmails = (function() {
+            const emails = [];
+            {{range .PirelliEmails}}
+            emails.push('{{.}}');
+            {{end}}
+            return emails.filter(Boolean);
+        })();
+
+        const defaultIkonEmails = (function() {
+            const emails = [];
+            {{range .IkonEmails}}
+            emails.push('{{.}}');
+            {{end}}
+            return emails.filter(Boolean);
+        })();
+        
         // Сбрасываем все состояния при загрузке
         window.onload = function() {
             resetState();
+            
+            // Заполняем поля email значениями по умолчанию
+            if (defaultPirelliEmails.length > 0) {
+                document.getElementById('pirelliEmails').value = defaultPirelliEmails.join(', ');
+            }
+            if (defaultIkonEmails.length > 0) {
+                document.getElementById('ikonEmails').value = defaultIkonEmails.join(', ');
+            }
         };
+        
+        // Toast уведомления
+        function showToast(message, type = 'info', title = '', duration = 5000) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            let icon = '';
+            switch(type) {
+                case 'success':
+                    icon = '✅';
+                    title = title || 'Успех';
+                    break;
+                case 'error':
+                    icon = '❌';
+                    title = title || 'Ошибка';
+                    break;
+                case 'warning':
+                    icon = '⚠️';
+                    title = title || 'Предупреждение';
+                    break;
+                default:
+                    icon = 'ℹ️';
+                    title = title || 'Информация';
+            }
+            
+            toast.innerHTML = `
+                <div class="toast-icon">${icon}</div>
+                <div class="toast-content">
+                    <div class="toast-title">${title}</div>
+                    <div class="toast-message">${message}</div>
+                </div>
+                <button class="toast-close" onclick="this.closest('.toast').classList.add('hiding'); setTimeout(() => this.closest('.toast').remove(), 300)">✕</button>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Автоматическое закрытие
+            if (duration > 0) {
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.classList.add('hiding');
+                        setTimeout(() => toast.remove(), 300);
+                    }
+                }, duration);
+            }
+        }
         
         function resetState() {
             isPasswordValid = false;
@@ -598,8 +794,6 @@
             checkBtn.textContent = 'Проверка...';
             checkBtn.disabled = true;
             
-            showLoading('Проверка пароля...');
-            
             try {
                 const response = await fetch('/api/check-password', {
                     method: 'POST',
@@ -610,7 +804,6 @@
                 });
                 
                 const result = await response.json();
-                hideResult();
                 
                 if (result.success) {
                     // Пароль верный
@@ -621,7 +814,7 @@
                     document.getElementById('browseBtn').disabled = false;
                     document.getElementById('fileInput').disabled = false;
                     document.getElementById('uploadArea').classList.remove('disabled');
-                    showResult('Пароль принят', true);
+                    showToast('Пароль принят', 'success', 'Доступ разрешен');
                 } else {
                     // Пароль неверный
                     isPasswordValid = false;
@@ -629,10 +822,10 @@
                     document.getElementById('browseBtn').disabled = true;
                     document.getElementById('fileInput').disabled = true;
                     document.getElementById('uploadArea').classList.add('disabled');
-                    showResult('Неверный пароль', false);
+                    showToast('Неверный пароль', 'error', 'Ошибка доступа');
                 }
             } catch (error) {
-                showResult('Ошибка при проверке пароля: ' + error.message, false);
+                showToast('Ошибка при проверке пароля: ' + error.message, 'error');
                 console.error('Ошибка:', error);
             } finally {
                 // Восстанавливаем кнопку
@@ -689,7 +882,7 @@
         
         function handleDrop(e) {
             if (!isPasswordValid) {
-                showResult('Сначала введите пароль', false);
+                showToast('Сначала введите пароль', 'warning');
                 return;
             }
             const dt = e.dataTransfer;
@@ -708,7 +901,7 @@
             
             const file = files[0];
             if (!file.name.toLowerCase().endsWith('.xlsx')) {
-                showResult('Можно загружать только XLSX файлы', false);
+                showToast('Можно загружать только XLSX файлы', 'error');
                 return;
             }
             
@@ -718,7 +911,7 @@
         async function uploadFile(file) {
             const password = document.getElementById('password').value;
             
-            showLoading('Загрузка файла...');
+            showToast('Загрузка файла...', 'info', 'Идет загрузка');
             
             const formData = new FormData();
             formData.append('file', file);
@@ -738,9 +931,10 @@
                     document.getElementById('uploadDate').textContent = new Date().toLocaleString();
                     document.getElementById('fileInfo').style.display = 'block';
                     
+                    showToast(`Файл "${file.name}" загружен`, 'success', 'Загрузка завершена');
                     await processFile(currentFile);
                 } else {
-                    showResult(result.message, false);
+                    showToast(result.message, 'error');
                     if (result.message.includes('пароль')) {
                         showPasswordError('Неверный пароль');
                         isPasswordValid = false;
@@ -750,7 +944,7 @@
                     }
                 }
             } catch (error) {
-                showResult('Ошибка: ' + error.message, false);
+                showToast('Ошибка: ' + error.message, 'error');
                 console.error('Ошибка загрузки:', error);
             }
         }
@@ -758,7 +952,7 @@
         async function processFile(filename) {
             const password = document.getElementById('password').value;
             
-            showLoading('Обработка файла...');
+            showToast('Обработка файла...', 'info', 'Идет обработка');
             
             try {
                 const response = await fetch('/api/process', {
@@ -778,12 +972,12 @@
                     processedData = result.data;
                     displayData(processedData);
                     document.getElementById('processingArea').style.display = 'block';
-                    showResult('Файл успешно обработан', true);
+                    showToast('Файл успешно обработан', 'success', 'Обработка завершена');
                 } else {
-                    showResult(result.message, false);
+                    showToast(result.message, 'error');
                 }
             } catch (error) {
-                showResult('Ошибка: ' + error.message, false);
+                showToast('Ошибка: ' + error.message, 'error');
                 console.error('Ошибка обработки:', error);
             }
         }
@@ -809,59 +1003,27 @@
                 </div>
             `;
             
-            // Pirelli
+            const allItems = data.all_items || [];
+            
+            // Pirelli - для CSV (с SKU)
             const pirelliItems = data.pirelli_items || [];
             document.getElementById('pirelliCount').textContent = pirelliItems.length;
             
-            const downloadPirelliCSVBtn = document.getElementById('downloadPirelliCSVBtn');
-            const sendPirelliBtn = document.getElementById('sendPirelliBtn');
-            const downloadPirelliExcelBtn = document.getElementById('downloadPirelliExcelBtn');
-            const sendPirelliExcelBtn = document.getElementById('sendPirelliExcelBtn');
+            // Pirelli - для Excel (все позиции)
+            const pirelliAllItems = allItems.filter(item => {
+                const brand = (item.clean_brand || '').toLowerCase();
+                return (brand.includes('pirelli') || brand.includes('formula') || 
+                        brand.includes('пирелли') || brand.includes('формула')) && item.quantity > 0;
+            });
             
-            // CSV и отправка в API доступны только при наличии позиций с SKU
-            if (pirelliItems.length > 0) {
-                downloadPirelliCSVBtn.disabled = false;
-                sendPirelliBtn.disabled = false;
-            } else {
-                downloadPirelliCSVBtn.disabled = true;
-                sendPirelliBtn.disabled = true;
-            }
-
-            const allPirelliItems = data.all_items.filter(item => 
-                item.clean_brand && (
-                    item.clean_brand.toLowerCase().includes('pirelli') || 
-                    item.clean_brand.toLowerCase().includes('formula')
-                ) && item.quantity > 0
-            );
+            // Ikon - все позиции (для подсчета используем все, включая без цены)
+            const ikonItems = allItems.filter(item => {
+                const brand = (item.clean_brand || '').toLowerCase();
+                return (brand.includes('ikon') || brand.includes('nokian') || 
+                       brand.includes('attar') || brand.includes('bars')) && item.quantity > 0;
+            });
             
-            if (allPirelliItems.length > 0) {
-                downloadPirelliExcelBtn.disabled = false;
-                sendPirelliExcelBtn.disabled = false;
-            } else {
-                downloadPirelliExcelBtn.disabled = true;
-                sendPirelliExcelBtn.disabled = true;
-            }
-            
-            // Ikon - активируем кнопки если есть данные
-            const allItems = data.all_items || [];
-            const downloadIkonBtn = document.getElementById('downloadIkonBtn');
-            const sendIkonBtn = document.getElementById('sendIkonBtn');
-            const ikonTotal = document.getElementById('ikonTotal');
-            
-            // Подсчитываем общее количество для Ikon (просто для информации)
-            const totalQuantity = allItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
-            ikonTotal.textContent = totalQuantity;
-            
-            if (allItems.length > 0) {
-                downloadIkonBtn.disabled = false;
-                sendIkonBtn.disabled = false;
-            } else {
-                downloadIkonBtn.disabled = true;
-                sendIkonBtn.disabled = true;
-            }
-            
-            // Cordiant - подсчитываем позиции с ManufacturerSKU
-            const allItems = data.all_items || [];
+            // Cordiant - только с ManufacturerSKU
             const cordiantItems = allItems.filter(item => {
                 const brand = (item.clean_brand || '').toLowerCase();
                 return (brand.includes('cordiant') || brand.includes('gislaved') || 
@@ -869,7 +1031,41 @@
                         item.quantity > 0 && item.manufacturer_sku;
             });
             
+            document.getElementById('ikonTotal').textContent = ikonItems.length;
             document.getElementById('cordiantCount').textContent = cordiantItems.length;
+            
+            // Активация кнопок
+            const downloadPirelliCSVBtn = document.getElementById('downloadPirelliCSVBtn');
+            const sendPirelliAPIBtn = document.getElementById('sendPirelliAPIBtn');
+            const downloadPirelliExcelBtn = document.getElementById('downloadPirelliExcelBtn');
+            const sendPirelliEmailBtn = document.getElementById('sendPirelliEmailBtn');
+            
+            if (pirelliItems.length > 0) {
+                downloadPirelliCSVBtn.disabled = false;
+                sendPirelliAPIBtn.disabled = false;
+            } else {
+                downloadPirelliCSVBtn.disabled = true;
+                sendPirelliAPIBtn.disabled = true;
+            }
+            
+            if (pirelliAllItems.length > 0) {
+                downloadPirelliExcelBtn.disabled = false;
+                sendPirelliEmailBtn.disabled = false;
+            } else {
+                downloadPirelliExcelBtn.disabled = true;
+                sendPirelliEmailBtn.disabled = true;
+            }
+            
+            const downloadIkonBtn = document.getElementById('downloadIkonBtn');
+            const sendIkonBtn = document.getElementById('sendIkonBtn');
+            
+            if (ikonItems.length > 0) {
+                downloadIkonBtn.disabled = false;
+                sendIkonBtn.disabled = false;
+            } else {
+                downloadIkonBtn.disabled = true;
+                sendIkonBtn.disabled = true;
+            }
             
             const downloadCordiantBtn = document.getElementById('downloadCordiantBtn');
             const sendCordiantBtn = document.getElementById('sendCordiantBtn');
@@ -881,7 +1077,7 @@
                 downloadCordiantBtn.disabled = true;
                 sendCordiantBtn.disabled = true;
             }
-
+            
             // Таблица
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = '';
@@ -919,7 +1115,7 @@
                 row.insertCell().textContent = item.quantity || 0;
                 
                 // Цена
-                row.insertCell().textContent = item.price ? item.price.toFixed(2) : '-';
+                row.insertCell().textContent = item.price ? item.price.toFixed(2) : '0.00';
                 
                 // Годовой
                 const yearCell = row.insertCell();
@@ -944,55 +1140,17 @@
             }
         }
         
-        async function downloadPirelliExcel() {
-            const password = document.getElementById('password').value;
-            window.location.href = `/api/download-pirelli-excel?password=${password}&file=${processedData.filename}`;
-        }
-
-        async function sendPirelliExcel() {
-            const password = document.getElementById('password').value;
-            const email = prompt('Введите email для отправки (заглушка):', 'test@example.com');
-            
-            if (!email) return;
-            
-            showLoading('Подготовка к отправке...');
-            
-            try {
-                const response = await fetch('/api/send-pirelli-excel', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        password: password,
-                        filename: processedData.filename,
-                        email: email
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    showResult(result.message, true);
-                } else {
-                    showResult(result.message, false);
-                }
-            } catch (error) {
-                showResult('Ошибка: ' + error.message, false);
-                console.error('Ошибка отправки Pirelli Excel:', error);
-            }
-        }
-
-        // Переименовываем старую функцию downloadPirelli в downloadPirelliCSV
+        // Pirelli функции
         async function downloadPirelliCSV() {
             const password = document.getElementById('password').value;
             window.location.href = `/api/download-pirelli-csv?password=${password}&file=${processedData.filename}`;
+            showToast('Скачивание CSV файла начато', 'success');
         }
         
-        async function sendToPirelli() {
+        async function sendPirelliAPI() {
             const password = document.getElementById('password').value;
             
-            showLoading('Отправка в Pirelli...');
+            showToast('Отправка в Pirelli API...', 'info', 'Идет отправка');
             
             try {
                 const response = await fetch('/api/send-pirelli', {
@@ -1012,30 +1170,78 @@
                     let message = result.message;
                     if (result.data && result.data.data && result.data.data.length > 0) {
                         const last = result.data.data[result.data.data.length - 1];
-                        message += `\nФайл: ${last.original_name}, время: ${last.datetime}`;
+                        message += `\nФайл: ${last.original_name}`;
                     }
-                    showResult(message, true);
+                    showToast(message, 'success', 'Отправка в Pirelli API');
                 } else {
-                    showResult(result.message, false);
+                    showToast(result.message, 'error');
                 }
             } catch (error) {
-                showResult('Ошибка: ' + error.message, false);
+                showToast('Ошибка: ' + error.message, 'error');
                 console.error('Ошибка отправки:', error);
             }
         }
         
+        async function downloadPirelliExcel() {
+            const password = document.getElementById('password').value;
+            window.location.href = `/api/download-pirelli-excel?password=${password}&file=${processedData.filename}`;
+            showToast('Скачивание Excel отчета начато', 'success');
+        }
+        
+        async function sendPirelliEmail() {
+            const password = document.getElementById('password').value;
+            const emails = document.getElementById('pirelliEmails').value;
+            
+            if (!emails) {
+                showToast('Введите email-адреса получателей', 'warning');
+                return;
+            }
+            
+            showToast('Отправка по email...', 'info', 'Идет отправка');
+            
+            try {
+                const response = await fetch('/api/send-pirelli-excel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        password: password,
+                        filename: processedData.filename,
+                        emails: emails  // ← важно: поле называется emails
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast(result.message, 'success', 'Email отправлен');
+                } else {
+                    showToast(result.message, 'error');
+                }
+            } catch (error) {
+                showToast('Ошибка: ' + error.message, 'error');
+                console.error('Ошибка отправки:', error);
+            }
+        }
+        
+        // Ikon функции
         async function downloadIkon() {
             const password = document.getElementById('password').value;
             window.location.href = `/api/download-ikon?password=${password}&file=${processedData.filename}`;
+            showToast('Скачивание Ikon отчета начато', 'success');
         }
         
         async function sendIkon() {
             const password = document.getElementById('password').value;
-            const email = prompt('Введите email для отправки (заглушка):', 'test@example.com');
+            const emails = document.getElementById('ikonEmails').value;
             
-            if (!email) return;
+            if (!emails) {
+                showToast('Введите email-адреса получателей', 'warning');
+                return;
+            }
             
-            showLoading('Подготовка к отправке...');
+            showToast('Отправка Ikon по email...', 'info', 'Идет отправка');
             
             try {
                 const response = await fetch('/api/send-ikon', {
@@ -1046,37 +1252,34 @@
                     body: JSON.stringify({
                         password: password,
                         filename: processedData.filename,
-                        email: email
+                        emails: emails  // ← важно: поле называется emails
                     })
                 });
                 
                 const result = await response.json();
                 
                 if (result.success) {
-                    let message = result.message;
-                    if (result.data && result.data.message) {
-                        message += ` (${result.data.message})`;
-                    }
-                    showResult(message, true);
+                    showToast(result.message, 'success', 'Email отправлен');
                 } else {
-                    showResult(result.message, false);
+                    showToast(result.message, 'error');
                 }
             } catch (error) {
-                showResult('Ошибка: ' + error.message, false);
+                showToast('Ошибка: ' + error.message, 'error');
                 console.error('Ошибка отправки Ikon:', error);
             }
         }
         
-        // Функции для Cordiant
+        // Cordiant функции
         async function downloadCordiant() {
             const password = document.getElementById('password').value;
             window.location.href = `/api/download-cordiant-csv?password=${password}&file=${processedData.filename}`;
+            showToast('Скачивание Cordiant CSV начато', 'success');
         }
-
+        
         async function sendCordiant() {
             const password = document.getElementById('password').value;
             
-            showLoading('Отправка в Cordiant...');
+            showToast('Отправка в Cordiant API...', 'info', 'Идет отправка');
             
             try {
                 const response = await fetch('/api/send-cordiant', {
@@ -1093,21 +1296,21 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    showResult('Отчет успешно отправлен в Cordiant', true);
+                    showToast(result.message, 'success', 'Отправка в Cordiant API');
                 } else {
-                    showResult(result.message, false);
+                    showToast(result.message, 'error');
                 }
             } catch (error) {
-                showResult('Ошибка: ' + error.message, false);
+                showToast('Ошибка: ' + error.message, 'error');
                 console.error('Ошибка отправки Cordiant:', error);
             }
         }
-
+        
         async function clearAll() {
             const password = document.getElementById('password').value;
             
             if (!password) {
-                showResult('Введите пароль', false);
+                showToast('Введите пароль', 'warning');
                 return;
             }
             
@@ -1115,7 +1318,7 @@
                 return;
             }
             
-            showLoading('Очистка...');
+            showToast('Очистка...', 'info', 'Идет очистка');
             
             try {
                 const response = await fetch('/api/clear', {
@@ -1139,43 +1342,19 @@
                     if (result.data) {
                         message += ` (загрузок: ${result.data.upload_removed}, обработанных: ${result.data.processed_removed})`;
                     }
-                    showResult(message, true);
+                    showToast(message, 'success', 'Очистка завершена');
                     
                     console.log('Очистка выполнена:', result.data);
                 } else {
-                    showResult(result.message, false);
+                    showToast(result.message, 'error');
                     if (result.message.includes('пароль')) {
                         showPasswordError('Неверный пароль');
                     }
                 }
             } catch (error) {
-                showResult('Ошибка при очистке: ' + error.message, false);
+                showToast('Ошибка при очистке: ' + error.message, 'error');
                 console.error('Ошибка очистки:', error);
             }
-        }
-        
-        function showLoading(message) {
-            const result = document.getElementById('result');
-            result.innerHTML = `<div class="loading"></div> ${message}`;
-            result.className = 'result';
-            result.style.display = 'block';
-        }
-        
-        function showResult(message, isSuccess) {
-            const result = document.getElementById('result');
-            result.textContent = message;
-            result.className = 'result ' + (isSuccess ? 'success' : 'error');
-            result.style.display = 'block';
-            
-            if (isSuccess) {
-                setTimeout(() => {
-                    result.style.display = 'none';
-                }, 5000);
-            }
-        }
-        
-        function hideResult() {
-            document.getElementById('result').style.display = 'none';
         }
     </script>
 </body>

@@ -26,9 +26,13 @@ type UploadHandler struct {
 	customerCode          string
 	pirelliBrands         []string
 	cordiantBrands        []string
+	pirelliEmails         []string
+	ikonEmails            []string
+	cordiantEmails        []string
 	parser                *processors.StockParser
 	pirelliAPI            *services.PirelliAPIService
 	cordiantAPI           *services.CordiantAPIService
+	smtpService           *services.SMTPService
 	pirelliProcessor      *processors.PirelliProcessor
 	ikonProcessor         *processors.IkonProcessor
 	pirelliExcelProcessor *processors.PirelliExcelProcessor
@@ -43,9 +47,13 @@ func NewUploadHandler(
 	customerCode string,
 	pirelliBrands []string,
 	cordiantBrands []string,
+	pirelliEmails []string,
+	ikonEmails []string,
+	cordiantEmails []string,
 	parser *processors.StockParser,
 	pirelliAPI *services.PirelliAPIService,
 	cordiantAPI *services.CordiantAPIService,
+	smtpService *services.SMTPService,
 	ikonProc *processors.IkonProcessor,
 	pirelliExcelProc *processors.PirelliExcelProcessor,
 	cordiantProc *processors.CordiantProcessor,
@@ -57,9 +65,13 @@ func NewUploadHandler(
 		customerCode:          customerCode,
 		pirelliBrands:         pirelliBrands,
 		cordiantBrands:        cordiantBrands,
+		pirelliEmails:         pirelliEmails,
+		ikonEmails:            ikonEmails,
+		cordiantEmails:        cordiantEmails,
 		parser:                parser,
 		pirelliAPI:            pirelliAPI,
 		cordiantAPI:           cordiantAPI,
+		smtpService:           smtpService,
 		pirelliProcessor:      processors.NewPirelliProcessor(customerCode),
 		ikonProcessor:         ikonProc,
 		pirelliExcelProcessor: pirelliExcelProc,
@@ -429,7 +441,7 @@ func (h *UploadHandler) HandleDownloadPirelliExcel(w http.ResponseWriter, r *htt
 	log.Printf("Скачан отчет Pirelli Excel: %s", downloadFilename)
 }
 
-// HandleSendPirelliExcel заглушка для отправки по SMTP
+// HandleSendPirelliExcel отправляет Excel отчет по email
 func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
@@ -439,7 +451,7 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 	var req struct {
 		Password string `json:"password"`
 		Filename string `json:"filename"`
-		Email    string `json:"email,omitempty"`
+		Emails   string `json:"emails"` // Получаем email-адреса из формы
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -451,6 +463,20 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 	if req.Password != h.adminPassword {
 		log.Println("Ошибка отправки Pirelli Excel: неверный пароль")
 		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		return
+	}
+
+	if h.smtpService == nil {
+		log.Println("Ошибка отправки: SMTP сервис не настроен")
+		sendJSON(w, false, "SMTP сервис не настроен", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Парсим email-адреса из формы
+	emailList := parseEmailList(req.Emails)
+	if len(emailList) == 0 {
+		log.Println("Ошибка отправки: не указаны email-адреса для Pirelli")
+		sendJSON(w, false, "Не указаны email-адреса получателей", nil, http.StatusBadRequest)
 		return
 	}
 
@@ -470,15 +496,210 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// TODO: Реализовать отправку по SMTP
-	log.Printf("ЗАГЛУШКА: отправка отчета Pirelli Excel по SMTP на %s", req.Email)
+	// Фильтруем позиции Pirelli
+	allPirelliItems := make([]models.StockItem, 0)
+	for _, item := range processed.AllItems {
+		brandLower := strings.ToLower(item.CleanBrand)
+		for _, pb := range h.pirelliBrands {
+			if strings.Contains(brandLower, strings.ToLower(pb)) && item.Quantity > 0 {
+				allPirelliItems = append(allPirelliItems, item)
+				break
+			}
+		}
+	}
 
-	// Для демонстрации возвращаем успех
-	sendJSON(w, true, "Отчет готов к отправке (SMTP заглушка)", map[string]interface{}{
-		"email":   req.Email,
-		"items":   len(processed.AllItems),
-		"message": "Функция отправки будет реализована позже",
+	if len(allPirelliItems) == 0 {
+		sendJSON(w, false, "Нет данных Pirelli для отправки", nil, http.StatusBadRequest)
+		return
+	}
+
+	// Создаем Excel файл
+	f, err := h.pirelliExcelProcessor.CreateExcelReport(processed.AllItems)
+	if err != nil {
+		log.Printf("Ошибка создания отчета Pirelli Excel: %v", err)
+		sendJSON(w, false, "Ошибка создания отчета", nil, http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	// Сохраняем во временный файл
+	tmpFile, err := os.CreateTemp("", "pirelli-excel-*.xlsx")
+	if err != nil {
+		log.Printf("Ошибка создания временного файла: %v", err)
+		sendJSON(w, false, "Ошибка создания файла", nil, http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	if err := f.SaveAs(tmpFile.Name()); err != nil {
+		log.Printf("Ошибка сохранения Excel: %v", err)
+		sendJSON(w, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Читаем файл для отправки
+	fileData, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		log.Printf("Ошибка чтения файла: %v", err)
+		sendJSON(w, false, "Ошибка чтения файла", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Отправляем по email
+	filename := h.pirelliExcelProcessor.GenerateFilename()
+	subject := fmt.Sprintf("Отчет Pirelli от %s", time.Now().Format("02.01.2006"))
+	body := fmt.Sprintf("Отчет Pirelli сформирован %s.\nВсего позиций: %d\nОбщее количество: %d",
+		time.Now().Format("02.01.2006 15:04:05"),
+		len(allPirelliItems),
+		len(processed.AllItems))
+
+	err = h.smtpService.SendEmail(emailList, subject, body, fileData, filename)
+	if err != nil {
+		log.Printf("Ошибка отправки email: %v", err)
+		sendJSON(w, false, "Ошибка отправки email: "+err.Error(), nil, http.StatusInternalServerError)
+		return
+	}
+
+	sendJSON(w, true, fmt.Sprintf("Отчет отправлен на %d адресов", len(emailList)), map[string]interface{}{
+		"emails": emailList,
+		"count":  len(allPirelliItems),
 	}, http.StatusOK)
+}
+
+// HandleSendIkon отправляет отчет Ikon по email
+func (h *UploadHandler) HandleSendIkon(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+		Filename string `json:"filename"`
+		Emails   string `json:"emails"` // Получаем email-адреса из формы
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Ошибка парсинга запроса send-ikon: %v", err)
+		sendJSON(w, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
+		return
+	}
+
+	if req.Password != h.adminPassword {
+		log.Println("Ошибка отправки Ikon: неверный пароль")
+		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		return
+	}
+
+	if h.smtpService == nil {
+		log.Println("Ошибка отправки: SMTP сервис не настроен")
+		sendJSON(w, false, "SMTP сервис не настроен", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Парсим email-адреса из формы
+	emailList := parseEmailList(req.Emails)
+	if len(emailList) == 0 {
+		log.Println("Ошибка отправки: не указаны email-адреса для Ikon")
+		sendJSON(w, false, "Не указаны email-адреса получателей", nil, http.StatusBadRequest)
+		return
+	}
+
+	// Загружаем обработанные данные
+	resultPath := filepath.Join(h.processedDir, req.Filename)
+	data, err := os.ReadFile(resultPath)
+	if err != nil {
+		log.Printf("Файл не найден: %s", req.Filename)
+		sendJSON(w, false, "Файл не найден", nil, http.StatusNotFound)
+		return
+	}
+
+	var processed models.ProcessedFile
+	if err := json.Unmarshal(data, &processed); err != nil {
+		log.Printf("Ошибка чтения данных из %s: %v", req.Filename, err)
+		sendJSON(w, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
+		return
+	}
+
+	if h.ikonProcessor == nil {
+		log.Println("Ошибка: процессор Ikon не инициализирован")
+		sendJSON(w, false, "Процессор Ikon не настроен", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Создаем отчет Ikon
+	f, err := h.ikonProcessor.CreateReport(processed.AllItems)
+	if err != nil {
+		log.Printf("Ошибка создания отчета Ikon: %v", err)
+		sendJSON(w, false, "Ошибка создания отчета", nil, http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	// Сохраняем во временный файл
+	tmpFile, err := os.CreateTemp("", "ikon-*.xlsx")
+	if err != nil {
+		log.Printf("Ошибка создания временного файла: %v", err)
+		sendJSON(w, false, "Ошибка создания файла", nil, http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	if err := f.SaveAs(tmpFile.Name()); err != nil {
+		log.Printf("Ошибка сохранения Excel: %v", err)
+		sendJSON(w, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Читаем файл для отправки
+	fileData, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		log.Printf("Ошибка чтения файла: %v", err)
+		sendJSON(w, false, "Ошибка чтения файла", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Отправляем по email
+	filename := h.ikonProcessor.GenerateFilename()
+	subject := fmt.Sprintf("Отчет Ikon от %s", time.Now().Format("02.01.2006"))
+
+	// Получаем статистику для тела письма
+	_, _, ikonTotal, allTotal := h.ikonProcessor.CalculateSums(processed.AllItems)
+
+	body := fmt.Sprintf("Отчет Ikon сформирован %s.\nВсего позиций в отчете: %d\nОбщее количество по всем брендам: %d",
+		time.Now().Format("02.01.2006 15:04:05"),
+		ikonTotal,
+		allTotal)
+
+	err = h.smtpService.SendEmail(emailList, subject, body, fileData, filename)
+	if err != nil {
+		log.Printf("Ошибка отправки email: %v", err)
+		sendJSON(w, false, "Ошибка отправки email: "+err.Error(), nil, http.StatusInternalServerError)
+		return
+	}
+
+	sendJSON(w, true, fmt.Sprintf("Отчет отправлен на %d адресов", len(emailList)), map[string]interface{}{
+		"emails": emailList,
+		"total":  ikonTotal,
+	}, http.StatusOK)
+}
+
+// Вспомогательная функция для парсинга email-адресов
+func parseEmailList(emailsStr string) []string {
+	if emailsStr == "" {
+		return []string{}
+	}
+	parts := strings.Split(emailsStr, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" && strings.Contains(p, "@") {
+			result = append(result, p)
+		}
+	}
+	return result
 }
 
 // HandleDownloadIkon скачивает Excel отчет для Ikon
@@ -553,134 +774,6 @@ func (h *UploadHandler) HandleDownloadIkon(w http.ResponseWriter, r *http.Reques
 	http.ServeFile(w, r, tmpFile.Name())
 
 	log.Printf("Скачан отчет Ikon: %s", downloadFilename)
-}
-
-// HandleSendIkon заглушка для отправки по SMTP
-func (h *UploadHandler) HandleSendIkon(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		Password string `json:"password"`
-		Filename string `json:"filename"`
-		Email    string `json:"email,omitempty"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Ошибка парсинга запроса send-ikon: %v", err)
-		sendJSON(w, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
-		return
-	}
-
-	if req.Password != h.adminPassword {
-		log.Println("Ошибка отправки Ikon: неверный пароль")
-		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
-		return
-	}
-
-	// Загружаем обработанные данные
-	resultPath := filepath.Join(h.processedDir, req.Filename)
-	data, err := os.ReadFile(resultPath)
-	if err != nil {
-		log.Printf("Файл не найден: %s", req.Filename)
-		sendJSON(w, false, "Файл не найден", nil, http.StatusNotFound)
-		return
-	}
-
-	var processed models.ProcessedFile
-	if err := json.Unmarshal(data, &processed); err != nil {
-		log.Printf("Ошибка чтения данных из %s: %v", req.Filename, err)
-		sendJSON(w, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
-		return
-	}
-
-	// TODO: Реализовать отправку по SMTP
-	log.Printf("ЗАГЛУШКА: отправка отчета Ikon по SMTP на %s", req.Email)
-
-	// Для демонстрации возвращаем успех
-	sendJSON(w, true, "Отчет готов к отправке (SMTP заглушка)", map[string]interface{}{
-		"email":   req.Email,
-		"items":   len(processed.AllItems),
-		"message": "Функция отправки будет реализована позже",
-	}, http.StatusOK)
-}
-
-// HandleClear очищает директории загрузок
-func (h *UploadHandler) HandleClear(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		Password string `json:"password"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Ошибка парсинга запроса clear: %v", err)
-		sendJSON(w, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
-		return
-	}
-
-	if req.Password != h.adminPassword {
-		log.Println("Ошибка очистки: неверный пароль")
-		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
-		return
-	}
-
-	// Счетчики для логирования
-	uploadCount := 0
-	processedCount := 0
-
-	// Удаляем файлы из uploads
-	files, err := os.ReadDir(h.uploadDir)
-	if err == nil {
-		for _, file := range files {
-			if !file.IsDir() {
-				filePath := filepath.Join(h.uploadDir, file.Name())
-				if err := os.Remove(filePath); err == nil {
-					uploadCount++
-					log.Printf("Удален файл загрузки: %s", file.Name())
-				}
-			}
-		}
-	}
-
-	// Удаляем файлы из processed
-	files, err = os.ReadDir(h.processedDir)
-	if err == nil {
-		for _, file := range files {
-			if !file.IsDir() {
-				filePath := filepath.Join(h.processedDir, file.Name())
-				if err := os.Remove(filePath); err == nil {
-					processedCount++
-					log.Printf("Удален обработанный файл: %s", file.Name())
-				}
-			}
-		}
-	}
-
-	log.Printf("Очистка завершена: удалено %d файлов загрузки, %d обработанных файлов", uploadCount, processedCount)
-
-	sendJSON(w, true, "Память очищена", map[string]interface{}{
-		"upload_removed":    uploadCount,
-		"processed_removed": processedCount,
-	}, http.StatusOK)
-}
-
-func sendJSON(w http.ResponseWriter, success bool, message string, data interface{}, status int) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-
-	encoder := json.NewEncoder(w)
-	encoder.SetEscapeHTML(false)
-	encoder.Encode(models.UploadResult{
-		Success: success,
-		Message: message,
-		Data:    data,
-	})
 }
 
 // HandleDownloadCordiantCSV скачивает CSV файл для Cordiant
@@ -839,4 +932,80 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 	}
 
 	sendJSON(w, response.Success, response.Message, response.Data, http.StatusOK)
+}
+
+// HandleClear очищает директории загрузок
+func (h *UploadHandler) HandleClear(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Ошибка парсинга запроса clear: %v", err)
+		sendJSON(w, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
+		return
+	}
+
+	if req.Password != h.adminPassword {
+		log.Println("Ошибка очистки: неверный пароль")
+		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		return
+	}
+
+	// Счетчики для логирования
+	uploadCount := 0
+	processedCount := 0
+
+	// Удаляем файлы из uploads
+	files, err := os.ReadDir(h.uploadDir)
+	if err == nil {
+		for _, file := range files {
+			if !file.IsDir() {
+				filePath := filepath.Join(h.uploadDir, file.Name())
+				if err := os.Remove(filePath); err == nil {
+					uploadCount++
+					log.Printf("Удален файл загрузки: %s", file.Name())
+				}
+			}
+		}
+	}
+
+	// Удаляем файлы из processed
+	files, err = os.ReadDir(h.processedDir)
+	if err == nil {
+		for _, file := range files {
+			if !file.IsDir() {
+				filePath := filepath.Join(h.processedDir, file.Name())
+				if err := os.Remove(filePath); err == nil {
+					processedCount++
+					log.Printf("Удален обработанный файл: %s", file.Name())
+				}
+			}
+		}
+	}
+
+	log.Printf("Очистка завершена: удалено %d файлов загрузки, %d обработанных файлов", uploadCount, processedCount)
+
+	sendJSON(w, true, "Память очищена", map[string]interface{}{
+		"upload_removed":    uploadCount,
+		"processed_removed": processedCount,
+	}, http.StatusOK)
+}
+
+func sendJSON(w http.ResponseWriter, success bool, message string, data interface{}, status int) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	encoder.Encode(models.UploadResult{
+		Success: success,
+		Message: message,
+		Data:    data,
+	})
 }

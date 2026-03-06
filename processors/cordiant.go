@@ -55,7 +55,7 @@ func (p *CordiantProcessor) FilterItems(items []models.StockItem) []models.Cordi
 			RowNum:     item.RowNum,
 			Code:       item.ManufacturerSKU, // Используем ManufacturerSKU как код
 			TireSize:   item.TireSize,
-			Brand:      item.CleanBrand,
+			Brand:      item.Name, // Используем Name вместо CleanBrand
 			Quantity:   item.Quantity,
 			CleanBrand: item.CleanBrand,
 		}
@@ -71,9 +71,6 @@ func (p *CordiantProcessor) CreateCSV(items []models.CordiantItem) ([]byte, erro
 	// Используем буфер для накопления данных
 	var buf strings.Builder
 
-	// Записываем BOM для UTF-8 (необязательно, но помогает с кодировкой)
-	// buf.WriteString("\xEF\xBB\xBF")
-
 	// Создаем CSV writer с разделителем ";"
 	writer := csv.NewWriter(&buf)
 	writer.Comma = ';'
@@ -83,7 +80,7 @@ func (p *CordiantProcessor) CreateCSV(items []models.CordiantItem) ([]byte, erro
 		row := []string{
 			item.Code,
 			item.TireSize,
-			item.Brand,
+			item.Brand, // Теперь здесь наименование, а не бренд
 			fmt.Sprintf("%d", item.Quantity),
 		}
 		if err := writer.Write(row); err != nil {

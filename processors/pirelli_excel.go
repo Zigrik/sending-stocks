@@ -85,8 +85,8 @@ func (p *PirelliExcelProcessor) CreateExcelReport(items []models.StockItem) (*ex
 		// Brand
 		f.SetCellValue("Pirelli Report", fmt.Sprintf("B%d", row), item.CleanBrand)
 
-		// IP code (код 1С)
-		f.SetCellValue("Pirelli Report", fmt.Sprintf("C%d", row), item.Code1C)
+		// IP code
+		f.SetCellValue("Pirelli Report", fmt.Sprintf("C%d", row), item.ManufacturerSKU)
 
 		// Size (типоразмер)
 		f.SetCellValue("Pirelli Report", fmt.Sprintf("D%d", row), item.TireSize)

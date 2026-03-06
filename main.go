@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -19,6 +20,18 @@ type Config struct {
 	AdminPassword string
 	UploadDir     string
 	ProcessedDir  string
+
+	// SMTP Configuration
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+	SMTPFrom     string
+
+	// Email recipients
+	PirelliEmails  []string
+	IkonEmails     []string
+	CordiantEmails []string
 
 	// Pirelli бренды
 	PirelliBrands []string
@@ -57,6 +70,7 @@ var (
 	pirelliExcelProcessor *processors.PirelliExcelProcessor
 	cordiantProcessor     *processors.CordiantProcessor
 	cordiantAPI           *services.CordiantAPIService
+	smtpService           *services.SMTPService
 )
 
 func main() {
@@ -66,10 +80,11 @@ func main() {
 	// Выводим конфигурацию для отладки
 	log.Println("=== Конфигурация ===")
 	log.Printf("ServerPort: %s", config.ServerPort)
-	log.Printf("AdminPassword: %s", config.AdminPassword)
-	log.Printf("PirelliBrands: %v", config.PirelliBrands)
-	log.Printf("CordiantBrands: %v", config.CordiantBrands)
-	log.Printf("IkonCompanyName: %s", config.IkonCompanyName)
+	log.Printf("SMTP Host: %s", config.SMTPHost)
+	log.Printf("Pirelli Brands: %v", config.PirelliBrands)
+	log.Printf("Cordiant Brands: %v", config.CordiantBrands)
+	log.Printf("Pirelli Emails: %v", config.PirelliEmails)
+	log.Printf("Ikon Emails: %v", config.IkonEmails)
 	log.Println("===================")
 
 	// Создаем директории
@@ -78,6 +93,20 @@ func main() {
 
 	// Инициализируем парсер с конфигурацией Pirelli брендов
 	parser = processors.NewStockParser(12, config.PirelliBrands)
+
+	// Инициализируем SMTP сервис
+	if config.SMTPHost != "" && config.SMTPUsername != "" {
+		smtpService = services.NewSMTPService(
+			config.SMTPHost,
+			config.SMTPPort,
+			config.SMTPUsername,
+			config.SMTPPassword,
+			config.SMTPFrom,
+		)
+		log.Println("SMTP сервис инициализирован")
+	} else {
+		log.Println("ВНИМАНИЕ: SMTP сервис не настроен")
+	}
 
 	// Инициализируем API для Pirelli
 	if config.PirelliLogin != "" && config.PirelliToken != "" {
@@ -166,20 +195,37 @@ func loadConfig() {
 		cordiantBrands[i] = strings.TrimSpace(brand)
 	}
 
-	// Парсим группы Ikon
+	// Получаем списки email-адресов
+	pirelliEmailsStr := getEnv("PIRELLI_EMAILS", "")
+	ikonEmailsStr := getEnv("IKON_EMAILS", "")
+	cordiantEmailsStr := getEnv("CORDIANT_EMAILS", "")
+
 	config = Config{
 		ServerPort:    getEnv("SERVER_PORT", "8080"),
 		AdminPassword: getEnv("ADMIN_PASSWORD", "admin123"),
 		UploadDir:     getEnv("UPLOAD_DIR", "./uploads"),
 		ProcessedDir:  getEnv("PROCESSED_DIR", "./uploads/processed"),
 
-		PirelliBrands: pirelliBrands,
+		// SMTP
+		SMTPHost:     getEnv("SMTP_HOST", "smtp.mail.ru"),
+		SMTPPort:     getEnvInt("SMTP_PORT", 587),
+		SMTPUsername: getEnv("SMTP_USERNAME", ""),
+		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:     getEnv("SMTP_FROM", ""),
 
+		// Email recipients
+		PirelliEmails:  parseEmailList(pirelliEmailsStr),
+		IkonEmails:     parseEmailList(ikonEmailsStr),
+		CordiantEmails: parseEmailList(cordiantEmailsStr),
+
+		// Pirelli
+		PirelliBrands:       pirelliBrands,
 		PirelliBaseURL:      getEnv("PIRELLI_BASE_URL", "https://reports.pirelli.ru/local/templates/dealer/ajax/api.php"),
 		PirelliLogin:        getEnv("PIRELLI_LOGIN", ""),
 		PirelliToken:        getEnv("PIRELLI_TOKEN", ""),
 		PirelliCustomerCode: getEnv("PIRELLI_CUSTOMER_CODE", "5700097"),
 
+		// Ikon
 		IkonCompanyName: getEnv("IKON_COMPANY_NAME", "IP SEMISOTNOV"),
 		IkonSummerA:     parseBrandList(getEnv("IKON_SUMMER_A", "Ikon Autograph,Nokian Hakka")),
 		IkonSummerB:     parseBrandList(getEnv("IKON_SUMMER_B", "Ikon Character,Nordman by Nokian")),
@@ -189,6 +235,7 @@ func loadConfig() {
 		IkonWinterB:     parseBrandList(getEnv("IKON_WINTER_B", "Ikon Character,Nordman by Nokian")),
 		IkonWinterC:     parseBrandList(getEnv("IKON_WINTER_C", "Attar")),
 
+		// Cordiant
 		CordiantBrands:   cordiantBrands,
 		CordiantBaseURL:  getEnv("CORDIANT_BASE_URL", "https://b2b.cordiant.ru/rest/"),
 		CordiantToken:    getEnv("CORDIANT_TOKEN", ""),
@@ -198,6 +245,9 @@ func loadConfig() {
 }
 
 func parseBrandList(s string) []string {
+	if s == "" {
+		return []string{}
+	}
 	parts := strings.Split(s, ",")
 	result := make([]string, 0, len(parts))
 	for _, p := range parts {
@@ -209,8 +259,41 @@ func parseBrandList(s string) []string {
 	return result
 }
 
+func parseEmailList(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" && strings.Contains(p, "@") {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+func getEnv(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	var intValue int
+	fmt.Sscanf(value, "%d", &intValue)
+	return intValue
+}
+
 func setupRoutes() {
-	webHandler := handlers.NewWebHandler()
+	webHandler := handlers.NewWebHandler(config.PirelliEmails, config.IkonEmails)
 	uploadHandler := handlers.NewUploadHandler(
 		config.AdminPassword,
 		config.UploadDir,
@@ -218,9 +301,13 @@ func setupRoutes() {
 		config.PirelliCustomerCode,
 		config.PirelliBrands,
 		config.CordiantBrands,
+		config.PirelliEmails,
+		config.IkonEmails,
+		config.CordiantEmails,
 		parser,
 		pirelliAPI,
 		cordiantAPI,
+		smtpService,
 		ikonProcessor,
 		pirelliExcelProcessor,
 		cordiantProcessor,
@@ -251,12 +338,4 @@ func setupRoutes() {
 	http.HandleFunc("/api/send-cordiant", uploadHandler.HandleSendCordiant)
 
 	http.HandleFunc("/api/clear", uploadHandler.HandleClear)
-}
-
-func getEnv(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	return value
 }

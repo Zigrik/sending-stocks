@@ -264,33 +264,35 @@ func cleanDigits(s string) string {
 	return builder.String()
 }
 
-// cleanPrice очищает цену, преобразуя "2 581,00" в 2581.00
+// cleanPrice очищает цену, извлекая число из строки
+// Удаляет все символы кроме цифр, последние две цифры отделяет точкой
 func cleanPrice(s string) string {
 	s = strings.TrimSpace(s)
-
-	// Удаляем все пробелы
-	var builder strings.Builder
-	for _, r := range s {
-		if r != ' ' && r != '\t' && r != '\n' && r != '\r' {
-			builder.WriteRune(r)
-		}
+	if s == "" {
+		return "0"
 	}
-	s = builder.String()
 
-	// Заменяем запятую на точку
-	s = strings.ReplaceAll(s, ",", ".")
-
-	// Оставляем только цифры и точку
-	builder.Reset()
-	dotCount := 0
+	// Оставляем только цифры
+	var digits strings.Builder
 	for _, r := range s {
 		if r >= '0' && r <= '9' {
-			builder.WriteRune(r)
-		} else if r == '.' && dotCount == 0 {
-			builder.WriteRune(r)
-			dotCount++
+			digits.WriteRune(r)
 		}
 	}
 
-	return builder.String()
+	priceStr := digits.String()
+	if priceStr == "" {
+		return "0"
+	}
+
+	// Если длина меньше 3, это просто число без копеек
+	if len(priceStr) <= 2 {
+		return priceStr
+	}
+
+	// Отделяем последние две цифры как копейки
+	mainPart := priceStr[:len(priceStr)-2]
+	centsPart := priceStr[len(priceStr)-2:]
+
+	return mainPart + "." + centsPart
 }

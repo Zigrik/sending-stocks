@@ -7,11 +7,23 @@ import (
 )
 
 // WebHandler обработчик веб-интерфейса
-type WebHandler struct{}
+type WebHandler struct {
+	pirelliEmails []string
+	ikonEmails    []string
+}
 
 // NewWebHandler создает новый обработчик
-func NewWebHandler() *WebHandler {
-	return &WebHandler{}
+func NewWebHandler(pirelliEmails, ikonEmails []string) *WebHandler {
+	return &WebHandler{
+		pirelliEmails: pirelliEmails,
+		ikonEmails:    ikonEmails,
+	}
+}
+
+// TemplateData данные для шаблона
+type TemplateData struct {
+	PirelliEmails []string
+	IkonEmails    []string
 }
 
 // HandleForm отображает форму загрузки
@@ -33,8 +45,13 @@ func (h *WebHandler) HandleForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	data := TemplateData{
+		PirelliEmails: h.pirelliEmails,
+		IkonEmails:    h.ikonEmails,
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	t.Execute(w, nil)
+	t.Execute(w, data)
 }
 
 func embeddedTemplate() string {
