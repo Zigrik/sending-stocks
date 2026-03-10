@@ -32,6 +32,7 @@ type Config struct {
 	PirelliEmails  []string
 	IkonEmails     []string
 	CordiantEmails []string
+	HankookEmails  []string
 
 	// Pirelli бренды
 	PirelliBrands []string
@@ -60,6 +61,9 @@ type Config struct {
 	CordiantToken    string
 	CordiantLogin    string
 	CordiantPassword string
+
+	// Hankook бренды
+	HankookBrands []string
 }
 
 var (
@@ -70,6 +74,7 @@ var (
 	pirelliExcelProcessor *processors.PirelliExcelProcessor
 	cordiantProcessor     *processors.CordiantProcessor
 	cordiantAPI           *services.CordiantAPIService
+	hankookProcessor      *processors.HankookProcessor
 	smtpService           *services.SMTPService
 )
 
@@ -83,8 +88,10 @@ func main() {
 	log.Printf("SMTP Host: %s", config.SMTPHost)
 	log.Printf("Pirelli Brands: %v", config.PirelliBrands)
 	log.Printf("Cordiant Brands: %v", config.CordiantBrands)
+	log.Printf("Hankook Brands: %v", config.HankookBrands)
 	log.Printf("Pirelli Emails: %v", config.PirelliEmails)
 	log.Printf("Ikon Emails: %v", config.IkonEmails)
+	log.Printf("Hankook Emails: %v", config.HankookEmails)
 	log.Println("===================")
 
 	// Создаем директории
@@ -157,6 +164,10 @@ func main() {
 		log.Println("ВНИМАНИЕ: API Cordiant не настроен (нет токена)")
 	}
 
+	// Инициализируем процессор Hankook
+	hankookProcessor = processors.NewHankookProcessor(config.HankookBrands)
+	log.Println("Процессор Hankook инициализирован")
+
 	// Настраиваем маршруты
 	setupRoutes()
 
@@ -195,10 +206,18 @@ func loadConfig() {
 		cordiantBrands[i] = strings.TrimSpace(brand)
 	}
 
+	// Получаем список брендов Hankook
+	hankookBrandsStr := getEnv("HANKOOK_BRANDS", "Hankook,Laufenn")
+	hankookBrands := strings.Split(hankookBrandsStr, ",")
+	for i, brand := range hankookBrands {
+		hankookBrands[i] = strings.TrimSpace(brand)
+	}
+
 	// Получаем списки email-адресов
 	pirelliEmailsStr := getEnv("PIRELLI_EMAILS", "")
 	ikonEmailsStr := getEnv("IKON_EMAILS", "")
 	cordiantEmailsStr := getEnv("CORDIANT_EMAILS", "")
+	hankookEmailsStr := getEnv("HANKOOK_EMAILS", "")
 
 	config = Config{
 		ServerPort:    getEnv("SERVER_PORT", "8080"),
@@ -217,6 +236,7 @@ func loadConfig() {
 		PirelliEmails:  parseEmailList(pirelliEmailsStr),
 		IkonEmails:     parseEmailList(ikonEmailsStr),
 		CordiantEmails: parseEmailList(cordiantEmailsStr),
+		HankookEmails:  parseEmailList(hankookEmailsStr),
 
 		// Pirelli
 		PirelliBrands:       pirelliBrands,
@@ -241,6 +261,9 @@ func loadConfig() {
 		CordiantToken:    getEnv("CORDIANT_TOKEN", ""),
 		CordiantLogin:    getEnv("CORDIANT_LOGIN", ""),
 		CordiantPassword: getEnv("CORDIANT_PASSWORD", ""),
+
+		// Hankook
+		HankookBrands: hankookBrands,
 	}
 }
 
@@ -293,7 +316,12 @@ func getEnvInt(key string, defaultValue int) int {
 }
 
 func setupRoutes() {
-	webHandler := handlers.NewWebHandler(config.PirelliEmails, config.IkonEmails)
+	webHandler := handlers.NewWebHandler(
+		config.PirelliEmails,
+		config.IkonEmails,
+		config.HankookEmails,
+	)
+
 	uploadHandler := handlers.NewUploadHandler(
 		config.AdminPassword,
 		config.UploadDir,
@@ -301,9 +329,11 @@ func setupRoutes() {
 		config.PirelliCustomerCode,
 		config.PirelliBrands,
 		config.CordiantBrands,
+		config.HankookBrands,
 		config.PirelliEmails,
 		config.IkonEmails,
 		config.CordiantEmails,
+		config.HankookEmails,
 		parser,
 		pirelliAPI,
 		cordiantAPI,
@@ -311,6 +341,7 @@ func setupRoutes() {
 		ikonProcessor,
 		pirelliExcelProcessor,
 		cordiantProcessor,
+		hankookProcessor,
 	)
 
 	// Статические файлы
@@ -336,6 +367,10 @@ func setupRoutes() {
 	// Cordiant
 	http.HandleFunc("/api/download-cordiant-csv", uploadHandler.HandleDownloadCordiantCSV)
 	http.HandleFunc("/api/send-cordiant", uploadHandler.HandleSendCordiant)
+
+	// Hankook
+	http.HandleFunc("/api/download-hankook-excel", uploadHandler.HandleDownloadHankookExcel)
+	http.HandleFunc("/api/send-hankook", uploadHandler.HandleSendHankook)
 
 	http.HandleFunc("/api/clear", uploadHandler.HandleClear)
 }

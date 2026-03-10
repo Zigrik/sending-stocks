@@ -10,13 +10,15 @@ import (
 type WebHandler struct {
 	pirelliEmails []string
 	ikonEmails    []string
+	hankookEmails []string
 }
 
 // NewWebHandler создает новый обработчик
-func NewWebHandler(pirelliEmails, ikonEmails []string) *WebHandler {
+func NewWebHandler(pirelliEmails, ikonEmails, hankookEmails []string) *WebHandler {
 	return &WebHandler{
 		pirelliEmails: pirelliEmails,
 		ikonEmails:    ikonEmails,
+		hankookEmails: hankookEmails,
 	}
 }
 
@@ -24,6 +26,7 @@ func NewWebHandler(pirelliEmails, ikonEmails []string) *WebHandler {
 type TemplateData struct {
 	PirelliEmails []string
 	IkonEmails    []string
+	HankookEmails []string
 }
 
 // HandleForm отображает форму загрузки
@@ -48,6 +51,7 @@ func (h *WebHandler) HandleForm(w http.ResponseWriter, r *http.Request) {
 	data := TemplateData{
 		PirelliEmails: h.pirelliEmails,
 		IkonEmails:    h.ikonEmails,
+		HankookEmails: h.hankookEmails,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

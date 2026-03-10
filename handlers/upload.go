@@ -26,9 +26,11 @@ type UploadHandler struct {
 	customerCode          string
 	pirelliBrands         []string
 	cordiantBrands        []string
+	hankookBrands         []string
 	pirelliEmails         []string
 	ikonEmails            []string
 	cordiantEmails        []string
+	hankookEmails         []string
 	parser                *processors.StockParser
 	pirelliAPI            *services.PirelliAPIService
 	cordiantAPI           *services.CordiantAPIService
@@ -37,6 +39,7 @@ type UploadHandler struct {
 	ikonProcessor         *processors.IkonProcessor
 	pirelliExcelProcessor *processors.PirelliExcelProcessor
 	cordiantProcessor     *processors.CordiantProcessor
+	hankookProcessor      *processors.HankookProcessor
 }
 
 // NewUploadHandler создает новый обработчик
@@ -47,9 +50,11 @@ func NewUploadHandler(
 	customerCode string,
 	pirelliBrands []string,
 	cordiantBrands []string,
+	hankookBrands []string,
 	pirelliEmails []string,
 	ikonEmails []string,
 	cordiantEmails []string,
+	hankookEmails []string,
 	parser *processors.StockParser,
 	pirelliAPI *services.PirelliAPIService,
 	cordiantAPI *services.CordiantAPIService,
@@ -57,6 +62,7 @@ func NewUploadHandler(
 	ikonProc *processors.IkonProcessor,
 	pirelliExcelProc *processors.PirelliExcelProcessor,
 	cordiantProc *processors.CordiantProcessor,
+	hankookProc *processors.HankookProcessor,
 ) *UploadHandler {
 	return &UploadHandler{
 		adminPassword:         adminPassword,
@@ -65,9 +71,11 @@ func NewUploadHandler(
 		customerCode:          customerCode,
 		pirelliBrands:         pirelliBrands,
 		cordiantBrands:        cordiantBrands,
+		hankookBrands:         hankookBrands,
 		pirelliEmails:         pirelliEmails,
 		ikonEmails:            ikonEmails,
 		cordiantEmails:        cordiantEmails,
+		hankookEmails:         hankookEmails,
 		parser:                parser,
 		pirelliAPI:            pirelliAPI,
 		cordiantAPI:           cordiantAPI,
@@ -76,6 +84,7 @@ func NewUploadHandler(
 		ikonProcessor:         ikonProc,
 		pirelliExcelProcessor: pirelliExcelProc,
 		cordiantProcessor:     cordiantProc,
+		hankookProcessor:      hankookProc,
 	}
 }
 
@@ -1008,4 +1017,206 @@ func sendJSON(w http.ResponseWriter, success bool, message string, data interfac
 		Message: message,
 		Data:    data,
 	})
+}
+
+// HandleDownloadHankookExcel скачивает Excel отчет для Hankook
+func (h *UploadHandler) HandleDownloadHankookExcel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	password := r.URL.Query().Get("password")
+	filename := r.URL.Query().Get("file")
+
+	if password != h.adminPassword {
+		log.Println("Ошибка скачивания Hankook Excel: неверный пароль")
+		http.Error(w, "Неверный пароль", http.StatusUnauthorized)
+		return
+	}
+
+	// Загружаем обработанные данные
+	resultPath := filepath.Join(h.processedDir, filename)
+	data, err := os.ReadFile(resultPath)
+	if err != nil {
+		log.Printf("Файл не найден: %s", filename)
+		http.Error(w, "Файл не найден", http.StatusNotFound)
+		return
+	}
+
+	var processed models.ProcessedFile
+	if err := json.Unmarshal(data, &processed); err != nil {
+		log.Printf("Ошибка чтения данных из %s: %v", filename, err)
+		http.Error(w, "Ошибка чтения данных", http.StatusInternalServerError)
+		return
+	}
+
+	if h.hankookProcessor == nil {
+		log.Println("Ошибка: процессор Hankook не инициализирован")
+		http.Error(w, "Процессор Hankook не настроен", http.StatusInternalServerError)
+		return
+	}
+
+	// Создаем Excel отчет
+	f, err := h.hankookProcessor.CreateExcelReport(processed.AllItems)
+	if err != nil {
+		log.Printf("Ошибка создания отчета Hankook Excel: %v", err)
+		http.Error(w, "Ошибка создания отчета", http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	// Сохраняем во временный файл
+	tmpFile, err := os.CreateTemp("", "hankook-*.xlsx")
+	if err != nil {
+		log.Printf("Ошибка создания временного файла: %v", err)
+		http.Error(w, "Ошибка создания файла", http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	if err := f.SaveAs(tmpFile.Name()); err != nil {
+		log.Printf("Ошибка сохранения Excel: %v", err)
+		http.Error(w, "Ошибка сохранения файла", http.StatusInternalServerError)
+		return
+	}
+
+	// Отправляем файл
+	downloadFilename := h.hankookProcessor.GenerateFilename()
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=%s", downloadFilename))
+
+	http.ServeFile(w, r, tmpFile.Name())
+
+	log.Printf("Скачан отчет Hankook Excel: %s", downloadFilename)
+}
+
+// HandleSendHankook отправляет отчет Hankook по email
+func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+		Filename string `json:"filename"`
+		Emails   string `json:"emails"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Ошибка парсинга запроса send-hankook: %v", err)
+		sendJSON(w, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
+		return
+	}
+
+	if req.Password != h.adminPassword {
+		log.Println("Ошибка отправки Hankook: неверный пароль")
+		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		return
+	}
+
+	if h.smtpService == nil {
+		log.Println("Ошибка отправки: SMTP сервис не настроен")
+		sendJSON(w, false, "SMTP сервис не настроен", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Парсим email-адреса из формы
+	emailList := parseEmailList(req.Emails)
+	if len(emailList) == 0 {
+		// Если не указаны, используем email-адреса по умолчанию из конфигурации
+		if len(h.hankookEmails) > 0 {
+			emailList = h.hankookEmails
+		} else {
+			log.Println("Ошибка отправки: не указаны email-адреса для Hankook")
+			sendJSON(w, false, "Не указаны email-адреса получателей", nil, http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Загружаем обработанные данные
+	resultPath := filepath.Join(h.processedDir, req.Filename)
+	data, err := os.ReadFile(resultPath)
+	if err != nil {
+		log.Printf("Файл не найден: %s", req.Filename)
+		sendJSON(w, false, "Файл не найден", nil, http.StatusNotFound)
+		return
+	}
+
+	var processed models.ProcessedFile
+	if err := json.Unmarshal(data, &processed); err != nil {
+		log.Printf("Ошибка чтения данных из %s: %v", req.Filename, err)
+		sendJSON(w, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
+		return
+	}
+
+	if h.hankookProcessor == nil {
+		log.Println("Ошибка: процессор Hankook не инициализирован")
+		sendJSON(w, false, "Процессор Hankook не настроен", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Фильтруем позиции Hankook
+	hankookItems := h.hankookProcessor.FilterItems(processed.AllItems)
+
+	if len(hankookItems) == 0 {
+		log.Printf("Нет данных Hankook в файле %s", req.Filename)
+		sendJSON(w, false, "Нет данных Hankook для отправки", nil, http.StatusBadRequest)
+		return
+	}
+
+	// Создаем Excel отчет
+	f, err := h.hankookProcessor.CreateExcelReport(processed.AllItems)
+	if err != nil {
+		log.Printf("Ошибка создания отчета Hankook Excel: %v", err)
+		sendJSON(w, false, "Ошибка создания отчета", nil, http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	// Сохраняем во временный файл
+	tmpFile, err := os.CreateTemp("", "hankook-*.xlsx")
+	if err != nil {
+		log.Printf("Ошибка создания временного файла: %v", err)
+		sendJSON(w, false, "Ошибка создания файла", nil, http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	if err := f.SaveAs(tmpFile.Name()); err != nil {
+		log.Printf("Ошибка сохранения Excel: %v", err)
+		sendJSON(w, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Читаем файл для отправки
+	fileData, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		log.Printf("Ошибка чтения файла: %v", err)
+		sendJSON(w, false, "Ошибка чтения файла", nil, http.StatusInternalServerError)
+		return
+	}
+
+	// Отправляем по email
+	filename := h.hankookProcessor.GenerateFilename()
+	subject := fmt.Sprintf("Отчет Hankook от %s", time.Now().Format("02.01.2006"))
+	body := fmt.Sprintf("Отчет Hankook сформирован %s.\nВсего позиций: %d",
+		time.Now().Format("02.01.2006 15:04:05"),
+		len(hankookItems))
+
+	err = h.smtpService.SendEmail(emailList, subject, body, fileData, filename)
+	if err != nil {
+		log.Printf("Ошибка отправки email: %v", err)
+		sendJSON(w, false, "Ошибка отправки email: "+err.Error(), nil, http.StatusInternalServerError)
+		return
+	}
+
+	sendJSON(w, true, fmt.Sprintf("Отчет отправлен на %d адресов", len(emailList)), map[string]interface{}{
+		"emails": emailList,
+		"count":  len(hankookItems),
+	}, http.StatusOK)
 }
