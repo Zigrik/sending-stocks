@@ -100,16 +100,16 @@ func (h *UploadHandler) HandleCheckPassword(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		sendJSON(w, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
 		return
 	}
 
 	if req.Password == h.adminPassword {
 		log.Println("Проверка пароля: успешно")
-		sendJSON(w, true, "Пароль верный", nil, http.StatusOK)
+		sendJSON(w, r, true, "Пароль верный", nil, http.StatusOK)
 	} else {
 		log.Println("Проверка пароля: неверный пароль")
-		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		sendJSON(w, r, false, "Неверный пароль", nil, http.StatusUnauthorized)
 	}
 }
 
@@ -125,7 +125,7 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 
 	if password != h.adminPassword {
 		log.Println("Ошибка загрузки: неверный пароль")
-		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		sendJSON(w, r, false, "Неверный пароль", nil, http.StatusUnauthorized)
 		return
 	}
 
@@ -133,7 +133,7 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		log.Printf("Ошибка чтения файла: %v", err)
-		sendJSON(w, false, "Ошибка чтения файла: "+err.Error(), nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Ошибка чтения файла: "+err.Error(), nil, http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
@@ -141,7 +141,7 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	// Проверяем расширение
 	if !strings.HasSuffix(strings.ToLower(header.Filename), ".xlsx") {
 		log.Printf("Ошибка: неверный формат файла %s", header.Filename)
-		sendJSON(w, false, "Можно загружать только XLSX файлы", nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Можно загружать только XLSX файлы", nil, http.StatusBadRequest)
 		return
 	}
 
@@ -152,7 +152,7 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	dst, err := os.Create(filepath)
 	if err != nil {
 		log.Printf("Ошибка создания файла: %v", err)
-		sendJSON(w, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
 		return
 	}
 	defer dst.Close()
@@ -160,13 +160,13 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	bytesWritten, err := io.Copy(dst, file)
 	if err != nil {
 		log.Printf("Ошибка копирования файла: %v", err)
-		sendJSON(w, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
 		return
 	}
 
 	log.Printf("Файл загружен: %s (размер: %d байт)", filename, bytesWritten)
 
-	sendJSON(w, true, "Файл загружен", map[string]string{
+	sendJSON(w, r, true, "Файл загружен", map[string]string{
 		"filename": filename,
 	}, http.StatusOK)
 }
@@ -191,7 +191,7 @@ func (h *UploadHandler) HandleProcess(w http.ResponseWriter, r *http.Request) {
 
 	if req.Password != h.adminPassword {
 		log.Println("Ошибка обработки: неверный пароль")
-		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		sendJSON(w, r, false, "Неверный пароль", nil, http.StatusUnauthorized)
 		return
 	}
 
@@ -200,7 +200,7 @@ func (h *UploadHandler) HandleProcess(w http.ResponseWriter, r *http.Request) {
 	f, err := excelize.OpenFile(filePath)
 	if err != nil {
 		log.Printf("Ошибка открытия Excel файла %s: %v", req.Filename, err)
-		sendJSON(w, false, "Ошибка открытия Excel файла: "+err.Error(), nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка открытия Excel файла: "+err.Error(), nil, http.StatusInternalServerError)
 		return
 	}
 	defer f.Close()
@@ -209,7 +209,7 @@ func (h *UploadHandler) HandleProcess(w http.ResponseWriter, r *http.Request) {
 	processed, err := h.parser.Parse(f)
 	if err != nil {
 		log.Printf("Ошибка парсинга файла %s: %v", req.Filename, err)
-		sendJSON(w, false, "Ошибка обработки: "+err.Error(), nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка обработки: "+err.Error(), nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -220,14 +220,14 @@ func (h *UploadHandler) HandleProcess(w http.ResponseWriter, r *http.Request) {
 	resultData, _ := json.MarshalIndent(processed, "", "  ")
 	if err := os.WriteFile(resultPath, resultData, 0644); err != nil {
 		log.Printf("Ошибка сохранения результата: %v", err)
-		sendJSON(w, false, "Ошибка сохранения результата", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка сохранения результата", nil, http.StatusInternalServerError)
 		return
 	}
 
 	log.Printf("Файл обработан: %s, всего строк: %d, Pirelli: %d",
 		req.Filename, processed.Stats.TotalRows, processed.Stats.PirelliCount)
 
-	sendJSON(w, true, "Файл обработан", processed, http.StatusOK)
+	sendJSON(w, r, true, "Файл обработан", processed, http.StatusOK)
 }
 
 // HandleDownloadPirelliCSV скачивает CSV файл для Pirelli (только с SKU)
@@ -303,13 +303,13 @@ func (h *UploadHandler) HandleSendPirelli(w http.ResponseWriter, r *http.Request
 
 	if req.Password != h.adminPassword {
 		log.Println("Ошибка отправки: неверный пароль")
-		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		sendJSON(w, r, false, "Неверный пароль", nil, http.StatusUnauthorized)
 		return
 	}
 
 	if h.pirelliAPI == nil {
 		log.Println("Ошибка отправки: API Pirelli не настроен")
-		sendJSON(w, false, "API Pirelli не настроен", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "API Pirelli не настроен", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -318,27 +318,27 @@ func (h *UploadHandler) HandleSendPirelli(w http.ResponseWriter, r *http.Request
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
 		log.Printf("Файл не найден: %s", req.Filename)
-		sendJSON(w, false, "Файл не найден", nil, http.StatusNotFound)
+		sendJSON(w, r, false, "Файл не найден", nil, http.StatusNotFound)
 		return
 	}
 
 	var processed models.ProcessedFile
 	if err := json.Unmarshal(data, &processed); err != nil {
 		log.Printf("Ошибка чтения данных из %s: %v", req.Filename, err)
-		sendJSON(w, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
 		return
 	}
 
 	if len(processed.PirelliItems) == 0 {
 		log.Printf("Нет данных Pirelli в файле %s", req.Filename)
-		sendJSON(w, false, "Нет данных Pirelli для отправки", nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Нет данных Pirelli для отправки", nil, http.StatusBadRequest)
 		return
 	}
 
 	// Валидируем
 	if err := h.pirelliProcessor.Validate(processed.PirelliItems); err != nil {
 		log.Printf("Ошибка валидации: %v", err)
-		sendJSON(w, false, "Ошибка валидации: "+err.Error(), nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Ошибка валидации: "+err.Error(), nil, http.StatusBadRequest)
 		return
 	}
 
@@ -346,7 +346,7 @@ func (h *UploadHandler) HandleSendPirelli(w http.ResponseWriter, r *http.Request
 	tmpFile, err := os.CreateTemp("", "pirelli-*.csv")
 	if err != nil {
 		log.Printf("Ошибка создания временного файла: %v", err)
-		sendJSON(w, false, "Ошибка создания временного файла", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка создания временного файла", nil, http.StatusInternalServerError)
 		return
 	}
 	defer os.Remove(tmpFile.Name())
@@ -354,7 +354,7 @@ func (h *UploadHandler) HandleSendPirelli(w http.ResponseWriter, r *http.Request
 
 	if err := h.pirelliProcessor.CreateCSV(processed.PirelliItems, tmpFile); err != nil {
 		log.Printf("Ошибка создания CSV: %v", err)
-		sendJSON(w, false, "Ошибка создания CSV: "+err.Error(), nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка создания CSV: "+err.Error(), nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -363,7 +363,7 @@ func (h *UploadHandler) HandleSendPirelli(w http.ResponseWriter, r *http.Request
 	response, err := h.pirelliAPI.UploadFile(tmpFile.Name(), filename)
 	if err != nil {
 		log.Printf("Ошибка отправки в Pirelli: %v", err)
-		sendJSON(w, false, "Ошибка отправки: "+err.Error(), nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка отправки: "+err.Error(), nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -373,7 +373,7 @@ func (h *UploadHandler) HandleSendPirelli(w http.ResponseWriter, r *http.Request
 		log.Printf("Ошибка отправки в Pirelli: %s", response.Message)
 	}
 
-	sendJSON(w, response.Status, response.Message, response, http.StatusOK)
+	sendJSON(w, r, response.Status, response.Message, response, http.StatusOK)
 }
 
 // HandleDownloadPirelliExcel скачивает Excel отчет для Pirelli (все позиции)
@@ -465,19 +465,19 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("Ошибка парсинга запроса send-pirelli-excel: %v", err)
-		sendJSON(w, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
 		return
 	}
 
 	if req.Password != h.adminPassword {
 		log.Println("Ошибка отправки Pirelli Excel: неверный пароль")
-		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		sendJSON(w, r, false, "Неверный пароль", nil, http.StatusUnauthorized)
 		return
 	}
 
 	if h.smtpService == nil {
 		log.Println("Ошибка отправки: SMTP сервис не настроен")
-		sendJSON(w, false, "SMTP сервис не настроен", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "SMTP сервис не настроен", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -485,7 +485,7 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 	emailList := parseEmailList(req.Emails)
 	if len(emailList) == 0 {
 		log.Println("Ошибка отправки: не указаны email-адреса для Pirelli")
-		sendJSON(w, false, "Не указаны email-адреса получателей", nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Не указаны email-адреса получателей", nil, http.StatusBadRequest)
 		return
 	}
 
@@ -494,14 +494,14 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
 		log.Printf("Файл не найден: %s", req.Filename)
-		sendJSON(w, false, "Файл не найден", nil, http.StatusNotFound)
+		sendJSON(w, r, false, "Файл не найден", nil, http.StatusNotFound)
 		return
 	}
 
 	var processed models.ProcessedFile
 	if err := json.Unmarshal(data, &processed); err != nil {
 		log.Printf("Ошибка чтения данных из %s: %v", req.Filename, err)
-		sendJSON(w, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -518,7 +518,7 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 	}
 
 	if len(allPirelliItems) == 0 {
-		sendJSON(w, false, "Нет данных Pirelli для отправки", nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Нет данных Pirelli для отправки", nil, http.StatusBadRequest)
 		return
 	}
 
@@ -526,7 +526,7 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 	f, err := h.pirelliExcelProcessor.CreateExcelReport(processed.AllItems)
 	if err != nil {
 		log.Printf("Ошибка создания отчета Pirelli Excel: %v", err)
-		sendJSON(w, false, "Ошибка создания отчета", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка создания отчета", nil, http.StatusInternalServerError)
 		return
 	}
 	defer f.Close()
@@ -535,7 +535,7 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 	tmpFile, err := os.CreateTemp("", "pirelli-excel-*.xlsx")
 	if err != nil {
 		log.Printf("Ошибка создания временного файла: %v", err)
-		sendJSON(w, false, "Ошибка создания файла", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка создания файла", nil, http.StatusInternalServerError)
 		return
 	}
 	defer os.Remove(tmpFile.Name())
@@ -543,7 +543,7 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 
 	if err := f.SaveAs(tmpFile.Name()); err != nil {
 		log.Printf("Ошибка сохранения Excel: %v", err)
-		sendJSON(w, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -551,7 +551,7 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 	fileData, err := os.ReadFile(tmpFile.Name())
 	if err != nil {
 		log.Printf("Ошибка чтения файла: %v", err)
-		sendJSON(w, false, "Ошибка чтения файла", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка чтения файла", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -566,11 +566,11 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 	err = h.smtpService.SendEmail(emailList, subject, body, fileData, filename)
 	if err != nil {
 		log.Printf("Ошибка отправки email: %v", err)
-		sendJSON(w, false, "Ошибка отправки email: "+err.Error(), nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка отправки email: "+err.Error(), nil, http.StatusInternalServerError)
 		return
 	}
 
-	sendJSON(w, true, fmt.Sprintf("Отчет отправлен на %d адресов", len(emailList)), map[string]interface{}{
+	sendJSON(w, r, true, fmt.Sprintf("Отчет отправлен на %d адресов", len(emailList)), map[string]interface{}{
 		"emails": emailList,
 		"count":  len(allPirelliItems),
 	}, http.StatusOK)
@@ -591,19 +591,19 @@ func (h *UploadHandler) HandleSendIkon(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("Ошибка парсинга запроса send-ikon: %v", err)
-		sendJSON(w, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
 		return
 	}
 
 	if req.Password != h.adminPassword {
 		log.Println("Ошибка отправки Ikon: неверный пароль")
-		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		sendJSON(w, r, false, "Неверный пароль", nil, http.StatusUnauthorized)
 		return
 	}
 
 	if h.smtpService == nil {
 		log.Println("Ошибка отправки: SMTP сервис не настроен")
-		sendJSON(w, false, "SMTP сервис не настроен", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "SMTP сервис не настроен", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -611,7 +611,7 @@ func (h *UploadHandler) HandleSendIkon(w http.ResponseWriter, r *http.Request) {
 	emailList := parseEmailList(req.Emails)
 	if len(emailList) == 0 {
 		log.Println("Ошибка отправки: не указаны email-адреса для Ikon")
-		sendJSON(w, false, "Не указаны email-адреса получателей", nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Не указаны email-адреса получателей", nil, http.StatusBadRequest)
 		return
 	}
 
@@ -620,20 +620,20 @@ func (h *UploadHandler) HandleSendIkon(w http.ResponseWriter, r *http.Request) {
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
 		log.Printf("Файл не найден: %s", req.Filename)
-		sendJSON(w, false, "Файл не найден", nil, http.StatusNotFound)
+		sendJSON(w, r, false, "Файл не найден", nil, http.StatusNotFound)
 		return
 	}
 
 	var processed models.ProcessedFile
 	if err := json.Unmarshal(data, &processed); err != nil {
 		log.Printf("Ошибка чтения данных из %s: %v", req.Filename, err)
-		sendJSON(w, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
 		return
 	}
 
 	if h.ikonProcessor == nil {
 		log.Println("Ошибка: процессор Ikon не инициализирован")
-		sendJSON(w, false, "Процессор Ikon не настроен", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Процессор Ikon не настроен", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -641,7 +641,7 @@ func (h *UploadHandler) HandleSendIkon(w http.ResponseWriter, r *http.Request) {
 	f, err := h.ikonProcessor.CreateReport(processed.AllItems)
 	if err != nil {
 		log.Printf("Ошибка создания отчета Ikon: %v", err)
-		sendJSON(w, false, "Ошибка создания отчета", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка создания отчета", nil, http.StatusInternalServerError)
 		return
 	}
 	defer f.Close()
@@ -650,7 +650,7 @@ func (h *UploadHandler) HandleSendIkon(w http.ResponseWriter, r *http.Request) {
 	tmpFile, err := os.CreateTemp("", "ikon-*.xlsx")
 	if err != nil {
 		log.Printf("Ошибка создания временного файла: %v", err)
-		sendJSON(w, false, "Ошибка создания файла", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка создания файла", nil, http.StatusInternalServerError)
 		return
 	}
 	defer os.Remove(tmpFile.Name())
@@ -658,7 +658,7 @@ func (h *UploadHandler) HandleSendIkon(w http.ResponseWriter, r *http.Request) {
 
 	if err := f.SaveAs(tmpFile.Name()); err != nil {
 		log.Printf("Ошибка сохранения Excel: %v", err)
-		sendJSON(w, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -666,7 +666,7 @@ func (h *UploadHandler) HandleSendIkon(w http.ResponseWriter, r *http.Request) {
 	fileData, err := os.ReadFile(tmpFile.Name())
 	if err != nil {
 		log.Printf("Ошибка чтения файла: %v", err)
-		sendJSON(w, false, "Ошибка чтения файла", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка чтения файла", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -685,11 +685,11 @@ func (h *UploadHandler) HandleSendIkon(w http.ResponseWriter, r *http.Request) {
 	err = h.smtpService.SendEmail(emailList, subject, body, fileData, filename)
 	if err != nil {
 		log.Printf("Ошибка отправки email: %v", err)
-		sendJSON(w, false, "Ошибка отправки email: "+err.Error(), nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка отправки email: "+err.Error(), nil, http.StatusInternalServerError)
 		return
 	}
 
-	sendJSON(w, true, fmt.Sprintf("Отчет отправлен на %d адресов", len(emailList)), map[string]interface{}{
+	sendJSON(w, r, true, fmt.Sprintf("Отчет отправлен на %d адресов", len(emailList)), map[string]interface{}{
 		"emails": emailList,
 		"total":  ikonTotal,
 	}, http.StatusOK)
@@ -868,19 +868,19 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("Ошибка парсинга запроса send-cordiant: %v", err)
-		sendJSON(w, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
 		return
 	}
 
 	if req.Password != h.adminPassword {
 		log.Println("Ошибка отправки Cordiant: неверный пароль")
-		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		sendJSON(w, r, false, "Неверный пароль", nil, http.StatusUnauthorized)
 		return
 	}
 
 	if h.cordiantAPI == nil {
 		log.Println("Ошибка отправки: API Cordiant не настроен")
-		sendJSON(w, false, "API Cordiant не настроен", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "API Cordiant не настроен", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -889,20 +889,20 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
 		log.Printf("Файл не найден: %s", req.Filename)
-		sendJSON(w, false, "Файл не найден", nil, http.StatusNotFound)
+		sendJSON(w, r, false, "Файл не найден", nil, http.StatusNotFound)
 		return
 	}
 
 	var processed models.ProcessedFile
 	if err := json.Unmarshal(data, &processed); err != nil {
 		log.Printf("Ошибка чтения данных из %s: %v", req.Filename, err)
-		sendJSON(w, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
 		return
 	}
 
 	if h.cordiantProcessor == nil {
 		log.Println("Ошибка: процессор Cordiant не инициализирован")
-		sendJSON(w, false, "Процессор Cordiant не настроен", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Процессор Cordiant не настроен", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -911,7 +911,7 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 
 	if len(cordiantItems) == 0 {
 		log.Printf("Нет данных Cordiant в файле %s", req.Filename)
-		sendJSON(w, false, "Нет данных Cordiant для отправки", nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Нет данных Cordiant для отправки", nil, http.StatusBadRequest)
 		return
 	}
 
@@ -919,7 +919,7 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 	fileBase64, err := h.cordiantProcessor.PrepareBase64File(cordiantItems)
 	if err != nil {
 		log.Printf("Ошибка подготовки файла: %v", err)
-		sendJSON(w, false, "Ошибка подготовки файла: "+err.Error(), nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка подготовки файла: "+err.Error(), nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -930,7 +930,7 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 	response, err := h.cordiantAPI.SendReport(fileBase64, year, month)
 	if err != nil {
 		log.Printf("Ошибка отправки в Cordiant: %v", err)
-		sendJSON(w, false, "Ошибка отправки: "+err.Error(), nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка отправки: "+err.Error(), nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -940,7 +940,7 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 		log.Printf("Ошибка отправки в Cordiant: %s", response.Message)
 	}
 
-	sendJSON(w, response.Success, response.Message, response.Data, http.StatusOK)
+	sendJSON(w, r, response.Success, response.Message, response.Data, http.StatusOK)
 }
 
 // HandleClear очищает директории загрузок
@@ -956,13 +956,13 @@ func (h *UploadHandler) HandleClear(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("Ошибка парсинга запроса clear: %v", err)
-		sendJSON(w, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
 		return
 	}
 
 	if req.Password != h.adminPassword {
 		log.Println("Ошибка очистки: неверный пароль")
-		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		sendJSON(w, r, false, "Неверный пароль", nil, http.StatusUnauthorized)
 		return
 	}
 
@@ -1000,13 +1000,77 @@ func (h *UploadHandler) HandleClear(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Очистка завершена: удалено %d файлов загрузки, %d обработанных файлов", uploadCount, processedCount)
 
-	sendJSON(w, true, "Память очищена", map[string]interface{}{
+	sendJSON(w, r, true, "Память очищена", map[string]interface{}{
 		"upload_removed":    uploadCount,
 		"processed_removed": processedCount,
 	}, http.StatusOK)
 }
 
-func sendJSON(w http.ResponseWriter, success bool, message string, data interface{}, status int) {
+// formatClientIP форматирует IP для вывода в лог
+func formatClientIP(ip string) string {
+	switch ip {
+	case "::1", "127.0.0.1":
+		return "localhost"
+	case "":
+		return "unknown"
+	default:
+		return ip
+	}
+}
+
+// getClientIP получает реальный IP-адрес клиента с учетом прокси
+func getClientIP(r *http.Request) string {
+	// Проверяем заголовки от прокси/балансировщиков
+	ip := r.Header.Get("X-Forwarded-For")
+	if ip != "" {
+		ips := strings.Split(ip, ",")
+		return strings.TrimSpace(ips[0])
+	}
+
+	ip = r.Header.Get("X-Real-IP")
+	if ip != "" {
+		return ip
+	}
+
+	// Получаем RemoteAddr
+	remoteAddr := r.RemoteAddr
+
+	// Удаляем порт
+	if strings.Contains(remoteAddr, ":") {
+		// Для IPv6 адрес может быть в формате [::1]:port
+		if strings.Contains(remoteAddr, "[") {
+			// Извлекаем между [ и ]
+			start := strings.Index(remoteAddr, "[")
+			end := strings.Index(remoteAddr, "]")
+			if start != -1 && end != -1 {
+				ip = remoteAddr[start+1 : end]
+			} else {
+				ip = strings.Split(remoteAddr, ":")[0]
+			}
+		} else {
+			ip = strings.Split(remoteAddr, ":")[0]
+		}
+	} else {
+		ip = remoteAddr
+	}
+
+	// Для локальных адресов добавляем понятное название
+	switch ip {
+	case "::1", "127.0.0.1":
+		return "localhost"
+	default:
+		return ip
+	}
+}
+
+func sendJSON(w http.ResponseWriter, r *http.Request, success bool, message string, data interface{}, status int) {
+	// Получаем IP-адрес клиента
+	clientIP := getClientIP(r)
+
+	// Логируем запрос с IP
+	log.Printf("IP %s - %s - Status: %d, Success: %v, Message: %s",
+		formatClientIP(clientIP), r.URL.Path, status, success, message)
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 
@@ -1108,19 +1172,19 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("Ошибка парсинга запроса send-hankook: %v", err)
-		sendJSON(w, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
 		return
 	}
 
 	if req.Password != h.adminPassword {
 		log.Println("Ошибка отправки Hankook: неверный пароль")
-		sendJSON(w, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		sendJSON(w, r, false, "Неверный пароль", nil, http.StatusUnauthorized)
 		return
 	}
 
 	if h.smtpService == nil {
 		log.Println("Ошибка отправки: SMTP сервис не настроен")
-		sendJSON(w, false, "SMTP сервис не настроен", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "SMTP сервис не настроен", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -1132,7 +1196,7 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 			emailList = h.hankookEmails
 		} else {
 			log.Println("Ошибка отправки: не указаны email-адреса для Hankook")
-			sendJSON(w, false, "Не указаны email-адреса получателей", nil, http.StatusBadRequest)
+			sendJSON(w, r, false, "Не указаны email-адреса получателей", nil, http.StatusBadRequest)
 			return
 		}
 	}
@@ -1142,20 +1206,20 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
 		log.Printf("Файл не найден: %s", req.Filename)
-		sendJSON(w, false, "Файл не найден", nil, http.StatusNotFound)
+		sendJSON(w, r, false, "Файл не найден", nil, http.StatusNotFound)
 		return
 	}
 
 	var processed models.ProcessedFile
 	if err := json.Unmarshal(data, &processed); err != nil {
 		log.Printf("Ошибка чтения данных из %s: %v", req.Filename, err)
-		sendJSON(w, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
 		return
 	}
 
 	if h.hankookProcessor == nil {
 		log.Println("Ошибка: процессор Hankook не инициализирован")
-		sendJSON(w, false, "Процессор Hankook не настроен", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Процессор Hankook не настроен", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -1164,7 +1228,7 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 
 	if len(hankookItems) == 0 {
 		log.Printf("Нет данных Hankook в файле %s", req.Filename)
-		sendJSON(w, false, "Нет данных Hankook для отправки", nil, http.StatusBadRequest)
+		sendJSON(w, r, false, "Нет данных Hankook для отправки", nil, http.StatusBadRequest)
 		return
 	}
 
@@ -1172,7 +1236,7 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 	f, err := h.hankookProcessor.CreateExcelReport(processed.AllItems)
 	if err != nil {
 		log.Printf("Ошибка создания отчета Hankook Excel: %v", err)
-		sendJSON(w, false, "Ошибка создания отчета", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка создания отчета", nil, http.StatusInternalServerError)
 		return
 	}
 	defer f.Close()
@@ -1181,7 +1245,7 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 	tmpFile, err := os.CreateTemp("", "hankook-*.xlsx")
 	if err != nil {
 		log.Printf("Ошибка создания временного файла: %v", err)
-		sendJSON(w, false, "Ошибка создания файла", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка создания файла", nil, http.StatusInternalServerError)
 		return
 	}
 	defer os.Remove(tmpFile.Name())
@@ -1189,7 +1253,7 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 
 	if err := f.SaveAs(tmpFile.Name()); err != nil {
 		log.Printf("Ошибка сохранения Excel: %v", err)
-		sendJSON(w, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -1197,7 +1261,7 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 	fileData, err := os.ReadFile(tmpFile.Name())
 	if err != nil {
 		log.Printf("Ошибка чтения файла: %v", err)
-		sendJSON(w, false, "Ошибка чтения файла", nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка чтения файла", nil, http.StatusInternalServerError)
 		return
 	}
 
@@ -1211,11 +1275,11 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 	err = h.smtpService.SendEmail(emailList, subject, body, fileData, filename)
 	if err != nil {
 		log.Printf("Ошибка отправки email: %v", err)
-		sendJSON(w, false, "Ошибка отправки email: "+err.Error(), nil, http.StatusInternalServerError)
+		sendJSON(w, r, false, "Ошибка отправки email: "+err.Error(), nil, http.StatusInternalServerError)
 		return
 	}
 
-	sendJSON(w, true, fmt.Sprintf("Отчет отправлен на %d адресов", len(emailList)), map[string]interface{}{
+	sendJSON(w, r, true, fmt.Sprintf("Отчет отправлен на %d адресов", len(emailList)), map[string]interface{}{
 		"emails": emailList,
 		"count":  len(hankookItems),
 	}, http.StatusOK)
