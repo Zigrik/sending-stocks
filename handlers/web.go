@@ -11,14 +11,16 @@ type WebHandler struct {
 	pirelliEmails []string
 	ikonEmails    []string
 	hankookEmails []string
+	serviceName   string // имя сервиса для API Gateway
 }
 
 // NewWebHandler создает новый обработчик
-func NewWebHandler(pirelliEmails, ikonEmails, hankookEmails []string) *WebHandler {
+func NewWebHandler(pirelliEmails, ikonEmails, hankookEmails []string, serviceName string) *WebHandler {
 	return &WebHandler{
 		pirelliEmails: pirelliEmails,
 		ikonEmails:    ikonEmails,
 		hankookEmails: hankookEmails,
+		serviceName:   serviceName,
 	}
 }
 
@@ -27,6 +29,7 @@ type TemplateData struct {
 	PirelliEmails []string
 	IkonEmails    []string
 	HankookEmails []string
+	ServiceName   string // для формирования URL в JavaScript
 }
 
 // HandleForm отображает форму загрузки
@@ -52,6 +55,7 @@ func (h *WebHandler) HandleForm(w http.ResponseWriter, r *http.Request) {
 		PirelliEmails: h.pirelliEmails,
 		IkonEmails:    h.ikonEmails,
 		HankookEmails: h.hankookEmails,
+		ServiceName:   h.serviceName,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

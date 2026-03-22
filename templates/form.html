@@ -273,7 +273,11 @@
         .cordiant-section .section-title span {
             background: #2196f3;
         }
-
+        
+        .hankook-section {
+            background: #f5f5f5;
+        }
+        
         .hankook-section .section-title span {
             background: #9e9e9e;
         }
@@ -334,15 +338,6 @@
         
         .btn-warning:hover {
             background: #e0a800;
-        }
-        
-        .btn-cordiant {
-            background: #2196f3;
-            color: white;
-        }
-        
-        .btn-cordiant:hover:not(:disabled) {
-            background: #1976d2;
         }
         
         .note {
@@ -596,7 +591,7 @@
                     
                     <div>
                         <label for="pirelliEmails">Email-адреса для отправки (через запятую):</label>
-                        <input type="text" id="pirelliEmails" class="email-input" placeholder="email1@example.com, email2@example.com">
+                        <input type="text" id="pirelliEmails" class="email-input" placeholder="email1@example.com, email2@example.com" value="{{range .PirelliEmails}}{{.}}, {{end}}">
                     </div>
                     
                     <div class="actions">
@@ -626,7 +621,7 @@
                     
                     <div>
                         <label for="ikonEmails">Email-адреса для отправки (через запятую):</label>
-                        <input type="text" id="ikonEmails" class="email-input" placeholder="email1@example.com, email2@example.com">
+                        <input type="text" id="ikonEmails" class="email-input" placeholder="email1@example.com, email2@example.com" value="{{range .IkonEmails}}{{.}}, {{end}}">
                     </div>
                     
                     <div class="actions">
@@ -656,11 +651,11 @@
                     </div>
                 </div>
                 
-                <!-- Hankook секция - серый фон, кнопки стандартные -->
-                <div class="section hankook-section" style="background: #f5f5f5;">
+                <!-- Hankook секция - серый фон -->
+                <div class="section hankook-section">
                     <div class="section-title">
                         Hankook Group (Hankook, Laufenn)
-                        <span id="hankookCount" style="background: #9e9e9e;">0</span>
+                        <span id="hankookCount">0</span>
                     </div>
                     
                     <div>
@@ -677,7 +672,7 @@
                         </button>
                     </div>
                 </div>
-
+                
                 <div class="table-container">
                     <table id="itemsTable">
                         <thead>
@@ -690,7 +685,7 @@
                                 <th>Типоразмер</th>
                                 <th>Остаток</th>
                                 <th>Цена</th>
-                                <th>Отметка</th>
+                                <th>Годовой</th>
                             </tr>
                         </thead>
                         <tbody id="tableBody"></tbody>
@@ -700,7 +695,7 @@
         </div>
         
         <div class="footer">
-            <p>Версия 0.4.1</p>
+            <p>Версия 1.0.0</p>
         </div>
     </div>
 
@@ -708,6 +703,20 @@
         let currentFile = null;
         let processedData = null;
         let isPasswordValid = false;
+        
+        // Имя сервиса для API Gateway
+        const serviceName = '{{.ServiceName}}';
+        
+        // Функция для формирования URL API (относительный путь)
+        function apiUrl(endpoint) {
+            // Убираем начальный слеш, если есть
+            let cleanEndpoint = endpoint;
+            if (cleanEndpoint.startsWith('/')) {
+                cleanEndpoint = cleanEndpoint.substring(1);
+            }
+            // Формируем относительный путь: api/{service_name}/{endpoint}
+            return `api/${serviceName}/${cleanEndpoint}`;
+        }
         
         // Email-адреса из .env (заполняются сервером)
         const defaultPirelliEmails = (function() {
@@ -725,20 +734,32 @@
             {{end}}
             return emails.filter(Boolean);
         })();
+
+        const defaultHankookEmails = (function() {
+            const emails = [];
+            {{range .HankookEmails}}
+            emails.push('{{.}}');
+            {{end}}
+            return emails.filter(Boolean);
+        })();
         
         // Сбрасываем все состояния при загрузке
         window.onload = function() {
             resetState();
             
             // Заполняем поля email значениями по умолчанию
-            if (defaultPirelliEmails.length > 0) {
-                document.getElementById('pirelliEmails').value = defaultPirelliEmails.join(', ');
+            const pirelliField = document.getElementById('pirelliEmails');
+            const ikonField = document.getElementById('ikonEmails');
+            const hankookField = document.getElementById('hankookEmails');
+            
+            if (pirelliField && defaultPirelliEmails.length > 0) {
+                pirelliField.value = defaultPirelliEmails.join(', ');
             }
-            if (defaultIkonEmails.length > 0) {
-                document.getElementById('ikonEmails').value = defaultIkonEmails.join(', ');
+            if (ikonField && defaultIkonEmails.length > 0) {
+                ikonField.value = defaultIkonEmails.join(', ');
             }
-            if (defaultHankookEmails.length > 0) {
-                document.getElementById('hankookEmails').value = defaultHankookEmails.join(', ');
+            if (hankookField && defaultHankookEmails.length > 0) {
+                hankookField.value = defaultHankookEmails.join(', ');
             }
         };
         
@@ -778,7 +799,6 @@
             
             container.appendChild(toast);
             
-            // Автоматическое закрытие
             if (duration > 0) {
                 setTimeout(() => {
                     if (toast.parentNode) {
@@ -817,14 +837,15 @@
                 return;
             }
             
-            // Показываем индикатор загрузки на кнопке
             const checkBtn = document.getElementById('checkPasswordBtn');
             const originalText = checkBtn.textContent;
             checkBtn.textContent = 'Проверка...';
             checkBtn.disabled = true;
             
+            showToast('Проверка пароля...', 'info');
+            
             try {
-                const response = await fetch('/api/check-password', {
+                const response = await fetch(apiUrl('check-password'), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -835,7 +856,6 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    // Пароль верный
                     isPasswordValid = true;
                     document.getElementById('password').classList.remove('error');
                     document.getElementById('passwordError').style.display = 'none';
@@ -843,21 +863,19 @@
                     document.getElementById('browseBtn').disabled = false;
                     document.getElementById('fileInput').disabled = false;
                     document.getElementById('uploadArea').classList.remove('disabled');
-                    showToast('Пароль принят', 'success', 'Доступ разрешен');
+                    showToast('Пароль принят', 'success');
                 } else {
-                    // Пароль неверный
                     isPasswordValid = false;
                     showPasswordError('Неверный пароль');
                     document.getElementById('browseBtn').disabled = true;
                     document.getElementById('fileInput').disabled = true;
                     document.getElementById('uploadArea').classList.add('disabled');
-                    showToast('Неверный пароль', 'error', 'Ошибка доступа');
+                    showToast('Неверный пароль', 'error');
                 }
             } catch (error) {
                 showToast('Ошибка при проверке пароля: ' + error.message, 'error');
                 console.error('Ошибка:', error);
             } finally {
-                // Восстанавливаем кнопку
                 checkBtn.textContent = originalText;
                 checkBtn.disabled = false;
             }
@@ -947,7 +965,7 @@
             formData.append('password', password);
             
             try {
-                const response = await fetch('/api/upload', {
+                const response = await fetch(apiUrl('upload'), {
                     method: 'POST',
                     body: formData
                 });
@@ -960,7 +978,7 @@
                     document.getElementById('uploadDate').textContent = new Date().toLocaleString();
                     document.getElementById('fileInfo').style.display = 'block';
                     
-                    showToast(`Файл "${file.name}" загружен`, 'success', 'Загрузка завершена');
+                    showToast(`Файл "${file.name}" загружен`, 'success');
                     await processFile(currentFile);
                 } else {
                     showToast(result.message, 'error');
@@ -984,7 +1002,7 @@
             showToast('Обработка файла...', 'info', 'Идет обработка');
             
             try {
-                const response = await fetch('/api/process', {
+                const response = await fetch(apiUrl('process'), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -1001,7 +1019,7 @@
                     processedData = result.data;
                     displayData(processedData);
                     document.getElementById('processingArea').style.display = 'block';
-                    showToast('Файл успешно обработан', 'success', 'Обработка завершена');
+                    showToast('Файл успешно обработан', 'success');
                 } else {
                     showToast(result.message, 'error');
                 }
@@ -1012,7 +1030,6 @@
         }
         
         function displayData(data) {
-            // Статистика
             const stats = data.stats;
             document.getElementById('stats').innerHTML = `
                 <h3>Статистика обработки</h3>
@@ -1034,55 +1051,38 @@
             
             const allItems = data.all_items || [];
             
-            // Pirelli - для CSV (с SKU)
             const pirelliItems = data.pirelli_items || [];
             document.getElementById('pirelliCount').textContent = pirelliItems.length;
             
-            // Pirelli - для Excel (все позиции)
             const pirelliAllItems = allItems.filter(item => {
                 const brand = (item.clean_brand || '').toLowerCase();
                 return (brand.includes('pirelli') || brand.includes('formula') || 
                         brand.includes('пирелли') || brand.includes('формула')) && item.quantity > 0;
             });
             
-            // Ikon - все позиции (для подсчета используем все, включая без цены)
             const ikonItems = allItems.filter(item => {
                 const brand = (item.clean_brand || '').toLowerCase();
                 return (brand.includes('ikon') || brand.includes('nokian') || 
                        brand.includes('attar') || brand.includes('bars')) && item.quantity > 0;
             });
             
-            // Cordiant - только с ManufacturerSKU
             const cordiantItems = allItems.filter(item => {
                 const brand = (item.clean_brand || '').toLowerCase();
                 return (brand.includes('cordiant') || brand.includes('gislaved') || 
                         brand.includes('torero') || brand.includes('tunga')) && 
                         item.quantity > 0 && item.manufacturer_sku;
             });
-
-            //Hankook
+            
             const hankookItems = allItems.filter(item => {
                 const brand = (item.clean_brand || '').toLowerCase();
                 return (brand.includes('hankook') || brand.includes('laufenn')) && item.quantity > 0;
             });
-
-            document.getElementById('hankookCount').textContent = hankookItems.length;
-
-            const downloadHankookBtn = document.getElementById('downloadHankookBtn');
-            const sendHankookBtn = document.getElementById('sendHankookBtn');
-
-            if (hankookItems.length > 0) {
-                downloadHankookBtn.disabled = false;
-                sendHankookBtn.disabled = false;
-            } else {
-                downloadHankookBtn.disabled = true;
-                sendHankookBtn.disabled = true;
-            }
             
             document.getElementById('ikonTotal').textContent = ikonItems.length;
             document.getElementById('cordiantCount').textContent = cordiantItems.length;
+            document.getElementById('hankookCount').textContent = hankookItems.length;
             
-            // Активация кнопок
+            // Активация кнопок Pirelli
             const downloadPirelliCSVBtn = document.getElementById('downloadPirelliCSVBtn');
             const sendPirelliAPIBtn = document.getElementById('sendPirelliAPIBtn');
             const downloadPirelliExcelBtn = document.getElementById('downloadPirelliExcelBtn');
@@ -1104,6 +1104,7 @@
                 sendPirelliEmailBtn.disabled = true;
             }
             
+            // Активация кнопок Ikon
             const downloadIkonBtn = document.getElementById('downloadIkonBtn');
             const sendIkonBtn = document.getElementById('sendIkonBtn');
             
@@ -1115,6 +1116,7 @@
                 sendIkonBtn.disabled = true;
             }
             
+            // Активация кнопок Cordiant
             const downloadCordiantBtn = document.getElementById('downloadCordiantBtn');
             const sendCordiantBtn = document.getElementById('sendCordiantBtn');
             
@@ -1126,6 +1128,18 @@
                 sendCordiantBtn.disabled = true;
             }
             
+            // Активация кнопок Hankook
+            const downloadHankookBtn = document.getElementById('downloadHankookBtn');
+            const sendHankookBtn = document.getElementById('sendHankookBtn');
+            
+            if (hankookItems.length > 0) {
+                downloadHankookBtn.disabled = false;
+                sendHankookBtn.disabled = false;
+            } else {
+                downloadHankookBtn.disabled = true;
+                sendHankookBtn.disabled = true;
+            }
+            
             // Таблица
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = '';
@@ -1133,10 +1147,8 @@
             allItems.forEach(item => {
                 const row = tbody.insertRow();
                 
-                // Бренд
                 row.insertCell().textContent = item.clean_brand || '-';
                 
-                // Сезон
                 const seasonCell = row.insertCell();
                 if (item.season) {
                     const badge = document.createElement('span');
@@ -1147,25 +1159,13 @@
                     seasonCell.textContent = '-';
                 }
                 
-                // Код 1С
                 row.insertCell().textContent = item.code_1c || '-';
-                
-                // Код производителя
                 row.insertCell().textContent = item.manufacturer_sku || '-';
-                
-                // Наименование
                 row.insertCell().textContent = item.name || '-';
-                
-                // Типоразмер
                 row.insertCell().textContent = item.tire_size || '-';
-                
-                // Остаток
                 row.insertCell().textContent = item.quantity || 0;
-                
-                // Цена
                 row.insertCell().textContent = item.price ? item.price.toFixed(2) : '0.00';
                 
-                // Годовой
                 const yearCell = row.insertCell();
                 if (item.is_year_old) {
                     const badge = document.createElement('span');
@@ -1177,7 +1177,6 @@
                 }
             });
             
-            // Ошибки
             if (stats.errors && stats.errors.length > 0) {
                 let errorsHtml = '<h4>Ошибки при обработке:</h4><ul>';
                 stats.errors.forEach(err => {
@@ -1191,48 +1190,35 @@
         // Pirelli функции
         async function downloadPirelliCSV() {
             const password = document.getElementById('password').value;
-            window.location.href = `/api/download-pirelli-csv?password=${password}&file=${processedData.filename}`;
+            window.location.href = apiUrl(`download-pirelli-csv?password=${password}&file=${processedData.filename}`);
             showToast('Скачивание CSV файла начато', 'success');
         }
         
         async function sendPirelliAPI() {
             const password = document.getElementById('password').value;
-            
             showToast('Отправка в Pirelli API...', 'info', 'Идет отправка');
             
             try {
-                const response = await fetch('/api/send-pirelli', {
+                const response = await fetch(apiUrl('send-pirelli'), {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        password: password,
-                        filename: processedData.filename
-                    })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password: password, filename: processedData.filename})
                 });
                 
                 const result = await response.json();
-                
                 if (result.success) {
-                    let message = result.message;
-                    if (result.data && result.data.data && result.data.data.length > 0) {
-                        const last = result.data.data[result.data.data.length - 1];
-                        message += `\nФайл: ${last.original_name}`;
-                    }
-                    showToast(message, 'success', 'Отправка в Pirelli API');
+                    showToast(result.message, 'success', 'Отправка в Pirelli API');
                 } else {
                     showToast(result.message, 'error');
                 }
             } catch (error) {
                 showToast('Ошибка: ' + error.message, 'error');
-                console.error('Ошибка отправки:', error);
             }
         }
         
         async function downloadPirelliExcel() {
             const password = document.getElementById('password').value;
-            window.location.href = `/api/download-pirelli-excel?password=${password}&file=${processedData.filename}`;
+            window.location.href = apiUrl(`download-pirelli-excel?password=${password}&file=${processedData.filename}`);
             showToast('Скачивание Excel отчета начато', 'success');
         }
         
@@ -1248,20 +1234,13 @@
             showToast('Отправка по email...', 'info', 'Идет отправка');
             
             try {
-                const response = await fetch('/api/send-pirelli-excel', {
+                const response = await fetch(apiUrl('send-pirelli-excel'), {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        password: password,
-                        filename: processedData.filename,
-                        emails: emails  // ← важно: поле называется emails
-                    })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password: password, filename: processedData.filename, emails: emails})
                 });
                 
                 const result = await response.json();
-                
                 if (result.success) {
                     showToast(result.message, 'success', 'Email отправлен');
                 } else {
@@ -1269,14 +1248,13 @@
                 }
             } catch (error) {
                 showToast('Ошибка: ' + error.message, 'error');
-                console.error('Ошибка отправки:', error);
             }
         }
         
         // Ikon функции
         async function downloadIkon() {
             const password = document.getElementById('password').value;
-            window.location.href = `/api/download-ikon?password=${password}&file=${processedData.filename}`;
+            window.location.href = apiUrl(`download-ikon?password=${password}&file=${processedData.filename}`);
             showToast('Скачивание Ikon отчета начато', 'success');
         }
         
@@ -1292,20 +1270,13 @@
             showToast('Отправка Ikon по email...', 'info', 'Идет отправка');
             
             try {
-                const response = await fetch('/api/send-ikon', {
+                const response = await fetch(apiUrl('send-ikon'), {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        password: password,
-                        filename: processedData.filename,
-                        emails: emails  // ← важно: поле называется emails
-                    })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password: password, filename: processedData.filename, emails: emails})
                 });
                 
                 const result = await response.json();
-                
                 if (result.success) {
                     showToast(result.message, 'success', 'Email отправлен');
                 } else {
@@ -1313,36 +1284,28 @@
                 }
             } catch (error) {
                 showToast('Ошибка: ' + error.message, 'error');
-                console.error('Ошибка отправки Ikon:', error);
             }
         }
         
         // Cordiant функции
         async function downloadCordiant() {
             const password = document.getElementById('password').value;
-            window.location.href = `/api/download-cordiant-csv?password=${password}&file=${processedData.filename}`;
+            window.location.href = apiUrl(`download-cordiant-csv?password=${password}&file=${processedData.filename}`);
             showToast('Скачивание Cordiant CSV начато', 'success');
         }
         
         async function sendCordiant() {
             const password = document.getElementById('password').value;
-            
             showToast('Отправка в Cordiant API...', 'info', 'Идет отправка');
             
             try {
-                const response = await fetch('/api/send-cordiant', {
+                const response = await fetch(apiUrl('send-cordiant'), {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        password: password,
-                        filename: processedData.filename
-                    })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password: password, filename: processedData.filename})
                 });
                 
                 const result = await response.json();
-                
                 if (result.success) {
                     showToast(result.message, 'success', 'Отправка в Cordiant API');
                 } else {
@@ -1350,17 +1313,16 @@
                 }
             } catch (error) {
                 showToast('Ошибка: ' + error.message, 'error');
-                console.error('Ошибка отправки Cordiant:', error);
             }
         }
-
-        // Функции для Hankook
+        
+        // Hankook функции
         async function downloadHankook() {
             const password = document.getElementById('password').value;
-            window.location.href = `/api/download-hankook-excel?password=${password}&file=${processedData.filename}`;
+            window.location.href = apiUrl(`download-hankook-excel?password=${password}&file=${processedData.filename}`);
             showToast('Скачивание Hankook отчета начато', 'success');
         }
-
+        
         async function sendHankook() {
             const password = document.getElementById('password').value;
             const emails = document.getElementById('hankookEmails').value;
@@ -1373,20 +1335,13 @@
             showToast('Отправка Hankook по email...', 'info', 'Идет отправка');
             
             try {
-                const response = await fetch('/api/send-hankook', {
+                const response = await fetch(apiUrl('send-hankook'), {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        password: password,
-                        filename: processedData.filename,
-                        emails: emails
-                    })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password: password, filename: processedData.filename, emails: emails})
                 });
                 
                 const result = await response.json();
-                
                 if (result.success) {
                     showToast(result.message, 'success', 'Email отправлен');
                 } else {
@@ -1394,7 +1349,6 @@
                 }
             } catch (error) {
                 showToast('Ошибка: ' + error.message, 'error');
-                console.error('Ошибка отправки Hankook:', error);
             }
         }
         
@@ -1413,18 +1367,15 @@
             showToast('Очистка...', 'info', 'Идет очистка');
             
             try {
-                const response = await fetch('/api/clear', {
+                const response = await fetch(apiUrl('clear'), {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ password: password })
                 });
                 
                 const result = await response.json();
                 
                 if (result.success) {
-                    // Сбрасываем состояние
                     resetState();
                     document.getElementById('fileInfo').style.display = 'none';
                     document.getElementById('processingArea').style.display = 'none';
@@ -1435,8 +1386,6 @@
                         message += ` (загрузок: ${result.data.upload_removed}, обработанных: ${result.data.processed_removed})`;
                     }
                     showToast(message, 'success', 'Очистка завершена');
-                    
-                    console.log('Очистка выполнена:', result.data);
                 } else {
                     showToast(result.message, 'error');
                     if (result.message.includes('пароль')) {
@@ -1445,7 +1394,6 @@
                 }
             } catch (error) {
                 showToast('Ошибка при очистке: ' + error.message, 'error');
-                console.error('Ошибка очистки:', error);
             }
         }
     </script>

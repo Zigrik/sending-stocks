@@ -40,6 +40,7 @@ type UploadHandler struct {
 	pirelliExcelProcessor *processors.PirelliExcelProcessor
 	cordiantProcessor     *processors.CordiantProcessor
 	hankookProcessor      *processors.HankookProcessor
+	serviceName           string
 }
 
 // NewUploadHandler создает новый обработчик
@@ -63,6 +64,7 @@ func NewUploadHandler(
 	pirelliExcelProc *processors.PirelliExcelProcessor,
 	cordiantProc *processors.CordiantProcessor,
 	hankookProc *processors.HankookProcessor,
+	serviceName string,
 ) *UploadHandler {
 	return &UploadHandler{
 		adminPassword:         adminPassword,
@@ -85,6 +87,7 @@ func NewUploadHandler(
 		pirelliExcelProcessor: pirelliExcelProc,
 		cordiantProcessor:     cordiantProc,
 		hankookProcessor:      hankookProc,
+		serviceName:           serviceName,
 	}
 }
 
