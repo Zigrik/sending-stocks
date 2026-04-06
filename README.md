@@ -1,6 +1,6 @@
 # Sending Stocks - Мультибрендовый сервис отправки остатков
 
-Сервис для загрузки, обработки и отправки файлов остатков из 1С в системы производителей шин (Pirelli, Ikon, Cordiant и др.).
+Сервис для загрузки, обработки и отправки файлов остатков из 1С в системы производителей шин (Pirelli, Ikon, Cordiant, Hankook и др.).
 
 ## Возможности
 
@@ -10,6 +10,7 @@
   - **Pirelli** - CSV для API + Excel отчет (все позиции)
   - **Ikon** - сводный Excel отчет с группировкой по сезонам
   - **Cordiant** - CSV для API + фильтрация по коду производителя
+  - **Hankook** - сводный Excel отчет по брендам группы Hankook
 - 📧 Отправка отчетов по email (SMTP)
 - 🔒 Защита паролем
 - 🎨 Удобный веб-интерфейс с toast-уведомлениями
@@ -30,10 +31,6 @@ go build -o stock-server
 # Запуск
 ./stock-server
 
-Конфигурация
-Создайте файл .env в корневой директории на основе примера ниже:
-
-env
 # Сервер
 SERVER_PORT=8080
 ADMIN_PASSWORD=your_secure_password
@@ -53,6 +50,7 @@ SMTP_FROM=your_email@mail.ru
 PIRELLI_EMAILS=manager@company.ru,report@company.ru
 IKON_EMAILS=ikon@company.ru
 CORDIANT_EMAILS=cordiant@company.ru
+HANKOOK_EMAILS=hankook@company.ru
 
 # Pirelli
 PIRELLI_BRANDS=Pirelli,Formula
@@ -77,6 +75,11 @@ CORDIANT_BASE_URL=https://b2b.cordiant.ru/rest/
 CORDIANT_TOKEN=your_cordiant_token
 CORDIANT_LOGIN=your_login
 CORDIANT_PASSWORD=your_password
+
+# Hankook (группа брендов)
+HANKOOK_BRANDS=Hankook,Laufenn,Kingstar
+HANKOOK_REPORT_TITLE=Остатки по брендам группы Hankook
+
 Использование
 Запустите сервер: ./stock-server
 
@@ -96,6 +99,8 @@ Ikon: скачать Excel, отправить по email
 
 Cordiant: скачать CSV, отправить в API
 
+Hankook: скачать сводный Excel по брендам группы, отправить по email
+
 API Endpoints
 Метод	Эндпоинт	Описание
 POST	/api/check-password	Проверка пароля
@@ -109,9 +114,10 @@ GET	/api/download-ikon	Скачать Excel отчет Ikon
 POST	/api/send-ikon	Отправить Ikon по email
 GET	/api/download-cordiant-csv	Скачать CSV для Cordiant
 POST	/api/send-cordiant	Отправить в Cordiant API
+GET	/api/download-hankook	Скачать сводный Excel отчет Hankook
+POST	/api/send-hankook	Отправить Hankook по email
 POST	/api/clear	Очистить загруженные файлы
-Структура проекта
-text
+
 sending-stocks/
 ├── main.go                 # Точка входа
 ├── handlers/               # HTTP обработчики
@@ -122,7 +128,8 @@ sending-stocks/
 │   ├── pirelli.go          # Pirelli CSV
 │   ├── pirelli_excel.go    # Pirelli Excel
 │   ├── ikon.go             # Ikon отчет
-│   └── cordiant.go         # Cordiant отчет
+│   ├── cordiant.go         # Cordiant отчет
+│   └── hankook.go          # Hankook сводный Excel
 ├── services/               # Внешние сервисы
 │   ├── pirelli_api.go      # Pirelli API
 │   ├── cordiant_api.go     # Cordiant API
@@ -133,12 +140,13 @@ sending-stocks/
 │   └── form.html
 ├── uploads/                # Загруженные файлы
 └── .env                    # Конфигурация
+
 Формат входного файла
 Ожидается XLSX файл из 1С со следующей структурой (начиная с 12 строки):
 
 Колонка	Поле	Описание
 A	Наименование	Полное наименование товара
-C	Бренд + сезон	Например: "Pirelli лето" или "Cordiant зима"
+C	Бренд + сезон	Например: "Pirelli лето" или "Hankook зима"
 F	Код 1С	Внутренний код товара
 G	Код производителя	CAI или артикул производителя
 H	Типоразмер	Размер шины
