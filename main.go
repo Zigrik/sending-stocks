@@ -44,14 +44,16 @@ type Config struct {
 	PirelliCustomerCode string
 
 	// Ikon настройки
-	IkonCompanyName string
-	IkonSummerA     []string
-	IkonSummerB     []string
-	IkonSummerC     []string
-	IkonSummerD     []string
-	IkonWinterA     []string
-	IkonWinterB     []string
-	IkonWinterC     []string
+	IkonCompanyName   string
+	IkonSummerA       []string
+	IkonSummerB       []string
+	IkonSummerC       []string
+	IkonSummerD       []string
+	IkonWinterA       []string
+	IkonWinterB       []string
+	IkonWinterC       []string
+	IkonSummerExclude []string
+	IkonWinterExclude []string
 
 	// Cordiant бренды
 	CordiantBrands []string
@@ -64,6 +66,9 @@ type Config struct {
 
 	// Hankook бренды
 	HankookBrands []string
+
+	// Service name for API Gateway
+	ServiceName string
 }
 
 var (
@@ -85,13 +90,13 @@ func main() {
 	// Выводим конфигурацию для отладки
 	log.Println("=== Конфигурация ===")
 	log.Printf("ServerPort: %s", config.ServerPort)
+	log.Printf("ServiceName: %s", config.ServiceName)
 	log.Printf("SMTP Host: %s", config.SMTPHost)
 	log.Printf("Pirelli Brands: %v", config.PirelliBrands)
 	log.Printf("Cordiant Brands: %v", config.CordiantBrands)
 	log.Printf("Hankook Brands: %v", config.HankookBrands)
-	log.Printf("Pirelli Emails: %v", config.PirelliEmails)
-	log.Printf("Ikon Emails: %v", config.IkonEmails)
-	log.Printf("Hankook Emails: %v", config.HankookEmails)
+	log.Printf("Ikon Summer Exclude: %v", config.IkonSummerExclude)
+	log.Printf("Ikon Winter Exclude: %v", config.IkonWinterExclude)
 	log.Println("===================")
 
 	// Создаем директории
@@ -136,11 +141,18 @@ func main() {
 		"E": config.IkonSummerD,
 	}
 	winterGroups := map[string][]string{
-		"G": config.IkonWinterA,
-		"H": config.IkonWinterB,
-		"I": config.IkonWinterC,
+		"H": config.IkonWinterA,
+		"I": config.IkonWinterB,
+		"J": config.IkonWinterC,
 	}
-	ikonProcessor = processors.NewIkonProcessor(config.IkonCompanyName, summerGroups, winterGroups)
+
+	ikonProcessor = processors.NewIkonProcessor(
+		config.IkonCompanyName,
+		summerGroups,
+		winterGroups,
+		config.IkonSummerExclude,
+		config.IkonWinterExclude,
+	)
 	log.Println("Процессор Ikon инициализирован")
 
 	// Инициализируем процессор Excel для Pirelli
@@ -219,6 +231,10 @@ func loadConfig() {
 	cordiantEmailsStr := getEnv("CORDIANT_EMAILS", "")
 	hankookEmailsStr := getEnv("HANKOOK_EMAILS", "")
 
+	// Получаем списки исключаемых брендов для Ikon
+	ikonSummerExcludeStr := getEnv("IKON_SUMMER_EXCLUDE", "")
+	ikonWinterExcludeStr := getEnv("IKON_WINTER_EXCLUDE", "")
+
 	config = Config{
 		ServerPort:    getEnv("SERVER_PORT", "8080"),
 		AdminPassword: getEnv("ADMIN_PASSWORD", "admin123"),
@@ -246,24 +262,29 @@ func loadConfig() {
 		PirelliCustomerCode: getEnv("PIRELLI_CUSTOMER_CODE", "5700097"),
 
 		// Ikon
-		IkonCompanyName: getEnv("IKON_COMPANY_NAME", "IP SEMISOTNOV"),
-		IkonSummerA:     parseBrandList(getEnv("IKON_SUMMER_A", "Ikon Autograph,Nokian Hakka")),
-		IkonSummerB:     parseBrandList(getEnv("IKON_SUMMER_B", "Ikon Character,Nordman by Nokian")),
-		IkonSummerC:     parseBrandList(getEnv("IKON_SUMMER_C", "Bars")),
-		IkonSummerD:     parseBrandList(getEnv("IKON_SUMMER_D", "Attar")),
-		IkonWinterA:     parseBrandList(getEnv("IKON_WINTER_A", "Ikon Autograph,Nokian")),
-		IkonWinterB:     parseBrandList(getEnv("IKON_WINTER_B", "Ikon Character,Nordman by Nokian")),
-		IkonWinterC:     parseBrandList(getEnv("IKON_WINTER_C", "Attar")),
+		IkonCompanyName:   getEnv("IKON_COMPANY_NAME", "IP SEMISOTNOV"),
+		IkonSummerA:       parseBrandList(getEnv("IKON_SUMMER_A", "Ikon Autograph,Nokian Hakka")),
+		IkonSummerB:       parseBrandList(getEnv("IKON_SUMMER_B", "Ikon Character,Nordman by Nokian")),
+		IkonSummerC:       parseBrandList(getEnv("IKON_SUMMER_C", "Bars")),
+		IkonSummerD:       parseBrandList(getEnv("IKON_SUMMER_D", "Attar")),
+		IkonWinterA:       parseBrandList(getEnv("IKON_WINTER_A", "Ikon Autograph,Nokian")),
+		IkonWinterB:       parseBrandList(getEnv("IKON_WINTER_B", "Ikon Character,Nordman by Nokian")),
+		IkonWinterC:       parseBrandList(getEnv("IKON_WINTER_C", "Attar")),
+		IkonSummerExclude: parseBrandList(ikonSummerExcludeStr),
+		IkonWinterExclude: parseBrandList(ikonWinterExcludeStr),
 
 		// Cordiant
 		CordiantBrands:   cordiantBrands,
 		CordiantBaseURL:  getEnv("CORDIANT_BASE_URL", "https://b2b.cordiant.ru/rest/"),
-		CordiantToken:    getEnv("CORDIANT_TOKEN", ""),
-		CordiantLogin:    getEnv("CORDIANT_LOGIN", ""),
-		CordiantPassword: getEnv("CORDIANT_PASSWORD", ""),
+		CordiantToken:    getEnv("CORDIANT_TOKEN", "ec6c337186cd1a807399e64a103f64a3"),
+		CordiantLogin:    getEnv("CORDIANT_LOGIN", "Semisotnov_IPYA"),
+		CordiantPassword: getEnv("CORDIANT_PASSWORD", "Semisotnov_IPYA2018"),
 
 		// Hankook
 		HankookBrands: hankookBrands,
+
+		// Service name
+		ServiceName: getEnv("SERVICE_NAME", "sending-stocks"),
 	}
 }
 
@@ -320,6 +341,7 @@ func setupRoutes() {
 		config.PirelliEmails,
 		config.IkonEmails,
 		config.HankookEmails,
+		config.ServiceName,
 	)
 
 	uploadHandler := handlers.NewUploadHandler(
@@ -342,14 +364,17 @@ func setupRoutes() {
 		pirelliExcelProcessor,
 		cordiantProcessor,
 		hankookProcessor,
+		config.ServiceName,
 	)
 
 	// Статические файлы
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
-	// Маршруты
+	// Основной HTML (обслуживается напрямую)
 	http.HandleFunc("/", webHandler.HandleForm)
+
+	// API endpoints (будут проксироваться через Gateway)
 	http.HandleFunc("/api/check-password", uploadHandler.HandleCheckPassword)
 	http.HandleFunc("/api/upload", uploadHandler.HandleUpload)
 	http.HandleFunc("/api/process", uploadHandler.HandleProcess)
@@ -372,5 +397,6 @@ func setupRoutes() {
 	http.HandleFunc("/api/download-hankook-excel", uploadHandler.HandleDownloadHankookExcel)
 	http.HandleFunc("/api/send-hankook", uploadHandler.HandleSendHankook)
 
+	// Clear
 	http.HandleFunc("/api/clear", uploadHandler.HandleClear)
 }

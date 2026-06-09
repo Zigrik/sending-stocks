@@ -40,6 +40,7 @@ type UploadHandler struct {
 	pirelliExcelProcessor *processors.PirelliExcelProcessor
 	cordiantProcessor     *processors.CordiantProcessor
 	hankookProcessor      *processors.HankookProcessor
+	serviceName           string
 }
 
 // NewUploadHandler создает новый обработчик
@@ -63,6 +64,7 @@ func NewUploadHandler(
 	pirelliExcelProc *processors.PirelliExcelProcessor,
 	cordiantProc *processors.CordiantProcessor,
 	hankookProc *processors.HankookProcessor,
+	serviceName string,
 ) *UploadHandler {
 	return &UploadHandler{
 		adminPassword:         adminPassword,
@@ -85,6 +87,7 @@ func NewUploadHandler(
 		pirelliExcelProcessor: pirelliExcelProc,
 		cordiantProcessor:     cordiantProc,
 		hankookProcessor:      hankookProc,
+		serviceName:           serviceName,
 	}
 }
 
@@ -120,7 +123,6 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Получаем пароль из формы
 	password := r.FormValue("password")
 
 	if password != h.adminPassword {
@@ -129,7 +131,6 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Получаем файл
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		log.Printf("Ошибка чтения файла: %v", err)
@@ -138,14 +139,12 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Проверяем расширение
 	if !strings.HasSuffix(strings.ToLower(header.Filename), ".xlsx") {
 		log.Printf("Ошибка: неверный формат файла %s", header.Filename)
 		sendJSON(w, r, false, "Можно загружать только XLSX файлы", nil, http.StatusBadRequest)
 		return
 	}
 
-	// Сохраняем файл
 	filename := fmt.Sprintf("%s_%s", time.Now().Format("20060102_150405"), header.Filename)
 	filepath := filepath.Join(h.uploadDir, filename)
 
@@ -195,7 +194,6 @@ func (h *UploadHandler) HandleProcess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Открываем Excel файл
 	filePath := filepath.Join(h.uploadDir, req.Filename)
 	f, err := excelize.OpenFile(filePath)
 	if err != nil {
@@ -205,7 +203,6 @@ func (h *UploadHandler) HandleProcess(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 
-	// Парсим
 	processed, err := h.parser.Parse(f)
 	if err != nil {
 		log.Printf("Ошибка парсинга файла %s: %v", req.Filename, err)
@@ -215,7 +212,6 @@ func (h *UploadHandler) HandleProcess(w http.ResponseWriter, r *http.Request) {
 
 	processed.OriginalFile = req.Filename
 
-	// Сохраняем результат
 	resultPath := filepath.Join(h.processedDir, processed.Filename)
 	resultData, _ := json.MarshalIndent(processed, "", "  ")
 	if err := os.WriteFile(resultPath, resultData, 0644); err != nil {
@@ -230,7 +226,7 @@ func (h *UploadHandler) HandleProcess(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, r, true, "Файл обработан", processed, http.StatusOK)
 }
 
-// HandleDownloadPirelliCSV скачивает CSV файл для Pirelli (только с SKU)
+// HandleDownloadPirelliCSV скачивает CSV файл для Pirelli
 func (h *UploadHandler) HandleDownloadPirelliCSV(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
@@ -246,7 +242,6 @@ func (h *UploadHandler) HandleDownloadPirelliCSV(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Загружаем обработанные данные
 	resultPath := filepath.Join(h.processedDir, filename)
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
@@ -268,7 +263,6 @@ func (h *UploadHandler) HandleDownloadPirelliCSV(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Отправляем CSV
 	downloadFilename := h.pirelliProcessor.GenerateFilename()
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition",
@@ -313,7 +307,6 @@ func (h *UploadHandler) HandleSendPirelli(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Загружаем обработанные данные
 	resultPath := filepath.Join(h.processedDir, req.Filename)
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
@@ -335,14 +328,12 @@ func (h *UploadHandler) HandleSendPirelli(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Валидируем
 	if err := h.pirelliProcessor.Validate(processed.PirelliItems); err != nil {
 		log.Printf("Ошибка валидации: %v", err)
 		sendJSON(w, r, false, "Ошибка валидации: "+err.Error(), nil, http.StatusBadRequest)
 		return
 	}
 
-	// Создаем временный CSV файл
 	tmpFile, err := os.CreateTemp("", "pirelli-*.csv")
 	if err != nil {
 		log.Printf("Ошибка создания временного файла: %v", err)
@@ -358,7 +349,6 @@ func (h *UploadHandler) HandleSendPirelli(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Отправляем в Pirelli
 	filename := h.pirelliProcessor.GenerateFilename()
 	response, err := h.pirelliAPI.UploadFile(tmpFile.Name(), filename)
 	if err != nil {
@@ -376,7 +366,7 @@ func (h *UploadHandler) HandleSendPirelli(w http.ResponseWriter, r *http.Request
 	sendJSON(w, r, response.Status, response.Message, response, http.StatusOK)
 }
 
-// HandleDownloadPirelliExcel скачивает Excel отчет для Pirelli (все позиции)
+// HandleDownloadPirelliExcel скачивает Excel отчет для Pirelli
 func (h *UploadHandler) HandleDownloadPirelliExcel(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
@@ -392,7 +382,6 @@ func (h *UploadHandler) HandleDownloadPirelliExcel(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Загружаем обработанные данные
 	resultPath := filepath.Join(h.processedDir, filename)
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
@@ -414,7 +403,6 @@ func (h *UploadHandler) HandleDownloadPirelliExcel(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Создаем Excel отчет
 	f, err := h.pirelliExcelProcessor.CreateExcelReport(processed.AllItems)
 	if err != nil {
 		log.Printf("Ошибка создания отчета Pirelli Excel: %v", err)
@@ -423,7 +411,6 @@ func (h *UploadHandler) HandleDownloadPirelliExcel(w http.ResponseWriter, r *htt
 	}
 	defer f.Close()
 
-	// Сохраняем во временный файл
 	tmpFile, err := os.CreateTemp("", "pirelli-excel-*.xlsx")
 	if err != nil {
 		log.Printf("Ошибка создания временного файла: %v", err)
@@ -439,7 +426,6 @@ func (h *UploadHandler) HandleDownloadPirelliExcel(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Отправляем файл
 	downloadFilename := h.pirelliExcelProcessor.GenerateFilename()
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition",
@@ -460,7 +446,7 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 	var req struct {
 		Password string `json:"password"`
 		Filename string `json:"filename"`
-		Emails   string `json:"emails"` // Получаем email-адреса из формы
+		Emails   string `json:"emails"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -481,15 +467,17 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Парсим email-адреса из формы
 	emailList := parseEmailList(req.Emails)
 	if len(emailList) == 0 {
-		log.Println("Ошибка отправки: не указаны email-адреса для Pirelli")
-		sendJSON(w, r, false, "Не указаны email-адреса получателей", nil, http.StatusBadRequest)
-		return
+		if len(h.pirelliEmails) > 0 {
+			emailList = h.pirelliEmails
+		} else {
+			log.Println("Ошибка отправки: не указаны email-адреса для Pirelli")
+			sendJSON(w, r, false, "Не указаны email-адреса получателей", nil, http.StatusBadRequest)
+			return
+		}
 	}
 
-	// Загружаем обработанные данные
 	resultPath := filepath.Join(h.processedDir, req.Filename)
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
@@ -505,7 +493,6 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Фильтруем позиции Pirelli
 	allPirelliItems := make([]models.StockItem, 0)
 	for _, item := range processed.AllItems {
 		brandLower := strings.ToLower(item.CleanBrand)
@@ -522,7 +509,6 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Создаем Excel файл
 	f, err := h.pirelliExcelProcessor.CreateExcelReport(processed.AllItems)
 	if err != nil {
 		log.Printf("Ошибка создания отчета Pirelli Excel: %v", err)
@@ -531,7 +517,6 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 	}
 	defer f.Close()
 
-	// Сохраняем во временный файл
 	tmpFile, err := os.CreateTemp("", "pirelli-excel-*.xlsx")
 	if err != nil {
 		log.Printf("Ошибка создания временного файла: %v", err)
@@ -547,7 +532,6 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Читаем файл для отправки
 	fileData, err := os.ReadFile(tmpFile.Name())
 	if err != nil {
 		log.Printf("Ошибка чтения файла: %v", err)
@@ -555,7 +539,6 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Отправляем по email
 	filename := h.pirelliExcelProcessor.GenerateFilename()
 	subject := fmt.Sprintf("Отчет Pirelli от %s", time.Now().Format("02.01.2006"))
 	body := fmt.Sprintf("Отчет Pirelli сформирован %s.\nВсего позиций: %d\nОбщее количество: %d",
@@ -576,141 +559,6 @@ func (h *UploadHandler) HandleSendPirelliExcel(w http.ResponseWriter, r *http.Re
 	}, http.StatusOK)
 }
 
-// HandleSendIkon отправляет отчет Ikon по email
-func (h *UploadHandler) HandleSendIkon(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		Password string `json:"password"`
-		Filename string `json:"filename"`
-		Emails   string `json:"emails"` // Получаем email-адреса из формы
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Ошибка парсинга запроса send-ikon: %v", err)
-		sendJSON(w, r, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
-		return
-	}
-
-	if req.Password != h.adminPassword {
-		log.Println("Ошибка отправки Ikon: неверный пароль")
-		sendJSON(w, r, false, "Неверный пароль", nil, http.StatusUnauthorized)
-		return
-	}
-
-	if h.smtpService == nil {
-		log.Println("Ошибка отправки: SMTP сервис не настроен")
-		sendJSON(w, r, false, "SMTP сервис не настроен", nil, http.StatusInternalServerError)
-		return
-	}
-
-	// Парсим email-адреса из формы
-	emailList := parseEmailList(req.Emails)
-	if len(emailList) == 0 {
-		log.Println("Ошибка отправки: не указаны email-адреса для Ikon")
-		sendJSON(w, r, false, "Не указаны email-адреса получателей", nil, http.StatusBadRequest)
-		return
-	}
-
-	// Загружаем обработанные данные
-	resultPath := filepath.Join(h.processedDir, req.Filename)
-	data, err := os.ReadFile(resultPath)
-	if err != nil {
-		log.Printf("Файл не найден: %s", req.Filename)
-		sendJSON(w, r, false, "Файл не найден", nil, http.StatusNotFound)
-		return
-	}
-
-	var processed models.ProcessedFile
-	if err := json.Unmarshal(data, &processed); err != nil {
-		log.Printf("Ошибка чтения данных из %s: %v", req.Filename, err)
-		sendJSON(w, r, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
-		return
-	}
-
-	if h.ikonProcessor == nil {
-		log.Println("Ошибка: процессор Ikon не инициализирован")
-		sendJSON(w, r, false, "Процессор Ikon не настроен", nil, http.StatusInternalServerError)
-		return
-	}
-
-	// Создаем отчет Ikon
-	f, err := h.ikonProcessor.CreateReport(processed.AllItems)
-	if err != nil {
-		log.Printf("Ошибка создания отчета Ikon: %v", err)
-		sendJSON(w, r, false, "Ошибка создания отчета", nil, http.StatusInternalServerError)
-		return
-	}
-	defer f.Close()
-
-	// Сохраняем во временный файл
-	tmpFile, err := os.CreateTemp("", "ikon-*.xlsx")
-	if err != nil {
-		log.Printf("Ошибка создания временного файла: %v", err)
-		sendJSON(w, r, false, "Ошибка создания файла", nil, http.StatusInternalServerError)
-		return
-	}
-	defer os.Remove(tmpFile.Name())
-	defer tmpFile.Close()
-
-	if err := f.SaveAs(tmpFile.Name()); err != nil {
-		log.Printf("Ошибка сохранения Excel: %v", err)
-		sendJSON(w, r, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
-		return
-	}
-
-	// Читаем файл для отправки
-	fileData, err := os.ReadFile(tmpFile.Name())
-	if err != nil {
-		log.Printf("Ошибка чтения файла: %v", err)
-		sendJSON(w, r, false, "Ошибка чтения файла", nil, http.StatusInternalServerError)
-		return
-	}
-
-	// Отправляем по email
-	filename := h.ikonProcessor.GenerateFilename()
-	subject := fmt.Sprintf("Отчет Ikon от %s", time.Now().Format("02.01.2006"))
-
-	// Получаем статистику для тела письма
-	_, _, ikonTotal, allTotal := h.ikonProcessor.CalculateSums(processed.AllItems)
-
-	body := fmt.Sprintf("Отчет Ikon сформирован %s.\nВсего позиций в отчете: %d\nОбщее количество по всем брендам: %d",
-		time.Now().Format("02.01.2006 15:04:05"),
-		ikonTotal,
-		allTotal)
-
-	err = h.smtpService.SendEmail(emailList, subject, body, fileData, filename)
-	if err != nil {
-		log.Printf("Ошибка отправки email: %v", err)
-		sendJSON(w, r, false, "Ошибка отправки email: "+err.Error(), nil, http.StatusInternalServerError)
-		return
-	}
-
-	sendJSON(w, r, true, fmt.Sprintf("Отчет отправлен на %d адресов", len(emailList)), map[string]interface{}{
-		"emails": emailList,
-		"total":  ikonTotal,
-	}, http.StatusOK)
-}
-
-// Вспомогательная функция для парсинга email-адресов
-func parseEmailList(emailsStr string) []string {
-	if emailsStr == "" {
-		return []string{}
-	}
-	parts := strings.Split(emailsStr, ",")
-	result := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" && strings.Contains(p, "@") {
-			result = append(result, p)
-		}
-	}
-	return result
-}
-
 // HandleDownloadIkon скачивает Excel отчет для Ikon
 func (h *UploadHandler) HandleDownloadIkon(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -727,7 +575,6 @@ func (h *UploadHandler) HandleDownloadIkon(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Загружаем обработанные данные
 	resultPath := filepath.Join(h.processedDir, filename)
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
@@ -749,7 +596,6 @@ func (h *UploadHandler) HandleDownloadIkon(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Создаем отчет Ikon
 	f, err := h.ikonProcessor.CreateReport(processed.AllItems)
 	if err != nil {
 		log.Printf("Ошибка создания отчета Ikon: %v", err)
@@ -758,7 +604,6 @@ func (h *UploadHandler) HandleDownloadIkon(w http.ResponseWriter, r *http.Reques
 	}
 	defer f.Close()
 
-	// Сохраняем во временный файл
 	tmpFile, err := os.CreateTemp("", "ikon-*.xlsx")
 	if err != nil {
 		log.Printf("Ошибка создания временного файла: %v", err)
@@ -774,7 +619,6 @@ func (h *UploadHandler) HandleDownloadIkon(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Отправляем файл
 	downloadFilename := h.ikonProcessor.GenerateFilename()
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition",
@@ -783,6 +627,122 @@ func (h *UploadHandler) HandleDownloadIkon(w http.ResponseWriter, r *http.Reques
 	http.ServeFile(w, r, tmpFile.Name())
 
 	log.Printf("Скачан отчет Ikon: %s", downloadFilename)
+}
+
+// HandleSendIkon отправляет отчет Ikon по email
+func (h *UploadHandler) HandleSendIkon(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+		Filename string `json:"filename"`
+		Emails   string `json:"emails"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Ошибка парсинга запроса send-ikon: %v", err)
+		sendJSON(w, r, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
+		return
+	}
+
+	if req.Password != h.adminPassword {
+		log.Println("Ошибка отправки Ikon: неверный пароль")
+		sendJSON(w, r, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		return
+	}
+
+	if h.smtpService == nil {
+		log.Println("Ошибка отправки: SMTP сервис не настроен")
+		sendJSON(w, r, false, "SMTP сервис не настроен", nil, http.StatusInternalServerError)
+		return
+	}
+
+	emailList := parseEmailList(req.Emails)
+	if len(emailList) == 0 {
+		if len(h.ikonEmails) > 0 {
+			emailList = h.ikonEmails
+		} else {
+			log.Println("Ошибка отправки: не указаны email-адреса для Ikon")
+			sendJSON(w, r, false, "Не указаны email-адреса получателей", nil, http.StatusBadRequest)
+			return
+		}
+	}
+
+	resultPath := filepath.Join(h.processedDir, req.Filename)
+	data, err := os.ReadFile(resultPath)
+	if err != nil {
+		log.Printf("Файл не найден: %s", req.Filename)
+		sendJSON(w, r, false, "Файл не найден", nil, http.StatusNotFound)
+		return
+	}
+
+	var processed models.ProcessedFile
+	if err := json.Unmarshal(data, &processed); err != nil {
+		log.Printf("Ошибка чтения данных из %s: %v", req.Filename, err)
+		sendJSON(w, r, false, "Ошибка чтения данных", nil, http.StatusInternalServerError)
+		return
+	}
+
+	if h.ikonProcessor == nil {
+		log.Println("Ошибка: процессор Ikon не инициализирован")
+		sendJSON(w, r, false, "Процессор Ikon не настроен", nil, http.StatusInternalServerError)
+		return
+	}
+
+	f, err := h.ikonProcessor.CreateReport(processed.AllItems)
+	if err != nil {
+		log.Printf("Ошибка создания отчета Ikon: %v", err)
+		sendJSON(w, r, false, "Ошибка создания отчета", nil, http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	tmpFile, err := os.CreateTemp("", "ikon-*.xlsx")
+	if err != nil {
+		log.Printf("Ошибка создания временного файла: %v", err)
+		sendJSON(w, r, false, "Ошибка создания файла", nil, http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	if err := f.SaveAs(tmpFile.Name()); err != nil {
+		log.Printf("Ошибка сохранения Excel: %v", err)
+		sendJSON(w, r, false, "Ошибка сохранения файла", nil, http.StatusInternalServerError)
+		return
+	}
+
+	fileData, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		log.Printf("Ошибка чтения файла: %v", err)
+		sendJSON(w, r, false, "Ошибка чтения файла", nil, http.StatusInternalServerError)
+		return
+	}
+
+	filename := h.ikonProcessor.GenerateFilename()
+	subject := fmt.Sprintf("Отчет Ikon от %s", time.Now().Format("02.01.2006"))
+
+	// Исправленный вызов - 5 значений
+	_, _, allBrandsTotal, _, _ := h.ikonProcessor.CalculateSums(processed.AllItems)
+
+	body := fmt.Sprintf("Отчет Ikon сформирован %s.\nОбщее количество по всем брендам: %d",
+		time.Now().Format("02.01.2006 15:04:05"),
+		allBrandsTotal)
+
+	err = h.smtpService.SendEmail(emailList, subject, body, fileData, filename)
+	if err != nil {
+		log.Printf("Ошибка отправки email: %v", err)
+		sendJSON(w, r, false, "Ошибка отправки email: "+err.Error(), nil, http.StatusInternalServerError)
+		return
+	}
+
+	sendJSON(w, r, true, fmt.Sprintf("Отчет отправлен на %d адресов", len(emailList)), map[string]interface{}{
+		"emails": emailList,
+		"total":  allBrandsTotal,
+	}, http.StatusOK)
 }
 
 // HandleDownloadCordiantCSV скачивает CSV файл для Cordiant
@@ -801,7 +761,6 @@ func (h *UploadHandler) HandleDownloadCordiantCSV(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Загружаем обработанные данные
 	resultPath := filepath.Join(h.processedDir, filename)
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
@@ -823,7 +782,6 @@ func (h *UploadHandler) HandleDownloadCordiantCSV(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Фильтруем позиции для Cordiant
 	cordiantItems := h.cordiantProcessor.FilterItems(processed.AllItems)
 
 	if len(cordiantItems) == 0 {
@@ -832,7 +790,6 @@ func (h *UploadHandler) HandleDownloadCordiantCSV(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Создаем CSV
 	csvData, err := h.cordiantProcessor.CreateCSVWithEncoding(cordiantItems, "windows-1251")
 	if err != nil {
 		log.Printf("Ошибка создания CSV: %v", err)
@@ -840,7 +797,6 @@ func (h *UploadHandler) HandleDownloadCordiantCSV(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Отправляем файл
 	downloadFilename := h.cordiantProcessor.GenerateFilename()
 	w.Header().Set("Content-Type", "text/csv; charset=windows-1251")
 	w.Header().Set("Content-Disposition",
@@ -884,7 +840,6 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Загружаем обработанные данные
 	resultPath := filepath.Join(h.processedDir, req.Filename)
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
@@ -906,7 +861,6 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Фильтруем позиции для Cordiant
 	cordiantItems := h.cordiantProcessor.FilterItems(processed.AllItems)
 
 	if len(cordiantItems) == 0 {
@@ -915,7 +869,6 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Подготавливаем файл в base64
 	fileBase64, err := h.cordiantProcessor.PrepareBase64File(cordiantItems)
 	if err != nil {
 		log.Printf("Ошибка подготовки файла: %v", err)
@@ -923,10 +876,7 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Получаем текущий год и месяц
 	year, month := h.cordiantProcessor.GetCurrentYearMonth()
-
-	// Отправляем в Cordiant
 	response, err := h.cordiantAPI.SendReport(fileBase64, year, month)
 	if err != nil {
 		log.Printf("Ошибка отправки в Cordiant: %v", err)
@@ -941,146 +891,6 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 	}
 
 	sendJSON(w, r, response.Success, response.Message, response.Data, http.StatusOK)
-}
-
-// HandleClear очищает директории загрузок
-func (h *UploadHandler) HandleClear(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		Password string `json:"password"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Ошибка парсинга запроса clear: %v", err)
-		sendJSON(w, r, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
-		return
-	}
-
-	if req.Password != h.adminPassword {
-		log.Println("Ошибка очистки: неверный пароль")
-		sendJSON(w, r, false, "Неверный пароль", nil, http.StatusUnauthorized)
-		return
-	}
-
-	// Счетчики для логирования
-	uploadCount := 0
-	processedCount := 0
-
-	// Удаляем файлы из uploads
-	files, err := os.ReadDir(h.uploadDir)
-	if err == nil {
-		for _, file := range files {
-			if !file.IsDir() {
-				filePath := filepath.Join(h.uploadDir, file.Name())
-				if err := os.Remove(filePath); err == nil {
-					uploadCount++
-					log.Printf("Удален файл загрузки: %s", file.Name())
-				}
-			}
-		}
-	}
-
-	// Удаляем файлы из processed
-	files, err = os.ReadDir(h.processedDir)
-	if err == nil {
-		for _, file := range files {
-			if !file.IsDir() {
-				filePath := filepath.Join(h.processedDir, file.Name())
-				if err := os.Remove(filePath); err == nil {
-					processedCount++
-					log.Printf("Удален обработанный файл: %s", file.Name())
-				}
-			}
-		}
-	}
-
-	log.Printf("Очистка завершена: удалено %d файлов загрузки, %d обработанных файлов", uploadCount, processedCount)
-
-	sendJSON(w, r, true, "Память очищена", map[string]interface{}{
-		"upload_removed":    uploadCount,
-		"processed_removed": processedCount,
-	}, http.StatusOK)
-}
-
-// formatClientIP форматирует IP для вывода в лог
-func formatClientIP(ip string) string {
-	switch ip {
-	case "::1", "127.0.0.1":
-		return "localhost"
-	case "":
-		return "unknown"
-	default:
-		return ip
-	}
-}
-
-// getClientIP получает реальный IP-адрес клиента с учетом прокси
-func getClientIP(r *http.Request) string {
-	// Проверяем заголовки от прокси/балансировщиков
-	ip := r.Header.Get("X-Forwarded-For")
-	if ip != "" {
-		ips := strings.Split(ip, ",")
-		return strings.TrimSpace(ips[0])
-	}
-
-	ip = r.Header.Get("X-Real-IP")
-	if ip != "" {
-		return ip
-	}
-
-	// Получаем RemoteAddr
-	remoteAddr := r.RemoteAddr
-
-	// Удаляем порт
-	if strings.Contains(remoteAddr, ":") {
-		// Для IPv6 адрес может быть в формате [::1]:port
-		if strings.Contains(remoteAddr, "[") {
-			// Извлекаем между [ и ]
-			start := strings.Index(remoteAddr, "[")
-			end := strings.Index(remoteAddr, "]")
-			if start != -1 && end != -1 {
-				ip = remoteAddr[start+1 : end]
-			} else {
-				ip = strings.Split(remoteAddr, ":")[0]
-			}
-		} else {
-			ip = strings.Split(remoteAddr, ":")[0]
-		}
-	} else {
-		ip = remoteAddr
-	}
-
-	// Для локальных адресов добавляем понятное название
-	switch ip {
-	case "::1", "127.0.0.1":
-		return "localhost"
-	default:
-		return ip
-	}
-}
-
-func sendJSON(w http.ResponseWriter, r *http.Request, success bool, message string, data interface{}, status int) {
-	// Получаем IP-адрес клиента
-	clientIP := getClientIP(r)
-
-	// Логируем запрос с IP
-	log.Printf("IP %s - %s - Status: %d, Success: %v, Message: %s",
-		formatClientIP(clientIP), r.URL.Path, status, success, message)
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-
-	encoder := json.NewEncoder(w)
-	encoder.SetEscapeHTML(false)
-	encoder.Encode(models.UploadResult{
-		Success: success,
-		Message: message,
-		Data:    data,
-	})
 }
 
 // HandleDownloadHankookExcel скачивает Excel отчет для Hankook
@@ -1099,7 +909,6 @@ func (h *UploadHandler) HandleDownloadHankookExcel(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Загружаем обработанные данные
 	resultPath := filepath.Join(h.processedDir, filename)
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
@@ -1121,7 +930,6 @@ func (h *UploadHandler) HandleDownloadHankookExcel(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Создаем Excel отчет
 	f, err := h.hankookProcessor.CreateExcelReport(processed.AllItems)
 	if err != nil {
 		log.Printf("Ошибка создания отчета Hankook Excel: %v", err)
@@ -1130,7 +938,6 @@ func (h *UploadHandler) HandleDownloadHankookExcel(w http.ResponseWriter, r *htt
 	}
 	defer f.Close()
 
-	// Сохраняем во временный файл
 	tmpFile, err := os.CreateTemp("", "hankook-*.xlsx")
 	if err != nil {
 		log.Printf("Ошибка создания временного файла: %v", err)
@@ -1146,7 +953,6 @@ func (h *UploadHandler) HandleDownloadHankookExcel(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Отправляем файл
 	downloadFilename := h.hankookProcessor.GenerateFilename()
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition",
@@ -1188,10 +994,8 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Парсим email-адреса из формы
 	emailList := parseEmailList(req.Emails)
 	if len(emailList) == 0 {
-		// Если не указаны, используем email-адреса по умолчанию из конфигурации
 		if len(h.hankookEmails) > 0 {
 			emailList = h.hankookEmails
 		} else {
@@ -1201,7 +1005,6 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// Загружаем обработанные данные
 	resultPath := filepath.Join(h.processedDir, req.Filename)
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
@@ -1223,7 +1026,6 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Фильтруем позиции Hankook
 	hankookItems := h.hankookProcessor.FilterItems(processed.AllItems)
 
 	if len(hankookItems) == 0 {
@@ -1232,7 +1034,6 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Создаем Excel отчет
 	f, err := h.hankookProcessor.CreateExcelReport(processed.AllItems)
 	if err != nil {
 		log.Printf("Ошибка создания отчета Hankook Excel: %v", err)
@@ -1241,7 +1042,6 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 	}
 	defer f.Close()
 
-	// Сохраняем во временный файл
 	tmpFile, err := os.CreateTemp("", "hankook-*.xlsx")
 	if err != nil {
 		log.Printf("Ошибка создания временного файла: %v", err)
@@ -1257,7 +1057,6 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Читаем файл для отправки
 	fileData, err := os.ReadFile(tmpFile.Name())
 	if err != nil {
 		log.Printf("Ошибка чтения файла: %v", err)
@@ -1265,7 +1064,6 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Отправляем по email
 	filename := h.hankookProcessor.GenerateFilename()
 	subject := fmt.Sprintf("Отчет Hankook от %s", time.Now().Format("02.01.2006"))
 	body := fmt.Sprintf("Отчет Hankook сформирован %s.\nВсего позиций: %d",
@@ -1283,4 +1081,136 @@ func (h *UploadHandler) HandleSendHankook(w http.ResponseWriter, r *http.Request
 		"emails": emailList,
 		"count":  len(hankookItems),
 	}, http.StatusOK)
+}
+
+// HandleClear очищает директории загрузок
+func (h *UploadHandler) HandleClear(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Ошибка парсинга запроса clear: %v", err)
+		sendJSON(w, r, false, "Ошибка парсинга запроса", nil, http.StatusBadRequest)
+		return
+	}
+
+	if req.Password != h.adminPassword {
+		log.Println("Ошибка очистки: неверный пароль")
+		sendJSON(w, r, false, "Неверный пароль", nil, http.StatusUnauthorized)
+		return
+	}
+
+	uploadCount := 0
+	processedCount := 0
+
+	files, err := os.ReadDir(h.uploadDir)
+	if err == nil {
+		for _, file := range files {
+			if !file.IsDir() {
+				filePath := filepath.Join(h.uploadDir, file.Name())
+				if err := os.Remove(filePath); err == nil {
+					uploadCount++
+					log.Printf("Удален файл загрузки: %s", file.Name())
+				}
+			}
+		}
+	}
+
+	files, err = os.ReadDir(h.processedDir)
+	if err == nil {
+		for _, file := range files {
+			if !file.IsDir() {
+				filePath := filepath.Join(h.processedDir, file.Name())
+				if err := os.Remove(filePath); err == nil {
+					processedCount++
+					log.Printf("Удален обработанный файл: %s", file.Name())
+				}
+			}
+		}
+	}
+
+	log.Printf("Очистка завершена: удалено %d файлов загрузки, %d обработанных файлов", uploadCount, processedCount)
+
+	sendJSON(w, r, true, "Память очищена", map[string]interface{}{
+		"upload_removed":    uploadCount,
+		"processed_removed": processedCount,
+	}, http.StatusOK)
+}
+
+// Вспомогательные функции
+func parseEmailList(emailsStr string) []string {
+	if emailsStr == "" {
+		return []string{}
+	}
+	parts := strings.Split(emailsStr, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" && strings.Contains(p, "@") {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+func sendJSON(w http.ResponseWriter, r *http.Request, success bool, message string, data interface{}, status int) {
+	clientIP := getClientIP(r)
+
+	log.Printf("IP %s - %s - Status: %d, Success: %v, Message: %s",
+		clientIP, r.URL.Path, status, success, message)
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	encoder.Encode(models.UploadResult{
+		Success: success,
+		Message: message,
+		Data:    data,
+	})
+}
+
+func getClientIP(r *http.Request) string {
+	ip := r.Header.Get("X-Forwarded-For")
+	if ip != "" {
+		ips := strings.Split(ip, ",")
+		return strings.TrimSpace(ips[0])
+	}
+
+	ip = r.Header.Get("X-Real-IP")
+	if ip != "" {
+		return ip
+	}
+
+	remoteAddr := r.RemoteAddr
+
+	if strings.Contains(remoteAddr, ":") {
+		if strings.Contains(remoteAddr, "[") {
+			start := strings.Index(remoteAddr, "[")
+			end := strings.Index(remoteAddr, "]")
+			if start != -1 && end != -1 {
+				ip = remoteAddr[start+1 : end]
+			} else {
+				ip = strings.Split(remoteAddr, ":")[0]
+			}
+		} else {
+			ip = strings.Split(remoteAddr, ":")[0]
+		}
+	} else {
+		ip = remoteAddr
+	}
+
+	switch ip {
+	case "::1", "127.0.0.1":
+		return "localhost"
+	default:
+		return ip
+	}
 }
