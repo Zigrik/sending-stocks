@@ -66,9 +66,6 @@ type Config struct {
 
 	// Hankook бренды
 	HankookBrands []string
-
-	// Service name for API Gateway
-	ServiceName string
 }
 
 var (
@@ -90,7 +87,6 @@ func main() {
 	// Выводим конфигурацию для отладки
 	log.Println("=== Конфигурация ===")
 	log.Printf("ServerPort: %s", config.ServerPort)
-	log.Printf("ServiceName: %s", config.ServiceName)
 	log.Printf("SMTP Host: %s", config.SMTPHost)
 	log.Printf("Pirelli Brands: %v", config.PirelliBrands)
 	log.Printf("Cordiant Brands: %v", config.CordiantBrands)
@@ -282,9 +278,6 @@ func loadConfig() {
 
 		// Hankook
 		HankookBrands: hankookBrands,
-
-		// Service name
-		ServiceName: getEnv("SERVICE_NAME", "sending-stocks"),
 	}
 }
 
@@ -341,7 +334,6 @@ func setupRoutes() {
 		config.PirelliEmails,
 		config.IkonEmails,
 		config.HankookEmails,
-		config.ServiceName,
 	)
 
 	uploadHandler := handlers.NewUploadHandler(
@@ -364,17 +356,16 @@ func setupRoutes() {
 		pirelliExcelProcessor,
 		cordiantProcessor,
 		hankookProcessor,
-		config.ServiceName,
 	)
 
 	// Статические файлы
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
-	// Основной HTML (обслуживается напрямую)
+	// Основной HTML
 	http.HandleFunc("/", webHandler.HandleForm)
 
-	// API endpoints (будут проксироваться через Gateway)
+	// API endpoints
 	http.HandleFunc("/api/check-password", uploadHandler.HandleCheckPassword)
 	http.HandleFunc("/api/upload", uploadHandler.HandleUpload)
 	http.HandleFunc("/api/process", uploadHandler.HandleProcess)
