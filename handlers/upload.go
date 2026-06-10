@@ -817,6 +817,8 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 	var req struct {
 		Password string `json:"password"`
 		Filename string `json:"filename"`
+		Month    string `json:"month"`
+		Year     string `json:"year"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -837,6 +839,14 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Валидация месяца и года
+	if req.Month == "" || req.Year == "" {
+		log.Println("Ошибка отправки: не указаны месяц или год")
+		sendJSON(w, r, false, "Не указаны месяц или год", nil, http.StatusBadRequest)
+		return
+	}
+
+	// Загружаем обработанные данные
 	resultPath := filepath.Join(h.processedDir, req.Filename)
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
@@ -858,6 +868,7 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Фильтруем позиции для Cordiant
 	cordiantItems := h.cordiantProcessor.FilterItems(processed.AllItems)
 
 	if len(cordiantItems) == 0 {
@@ -866,6 +877,7 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Подготавливаем файл в base64
 	fileBase64, err := h.cordiantProcessor.PrepareBase64File(cordiantItems)
 	if err != nil {
 		log.Printf("Ошибка подготовки файла: %v", err)
@@ -873,8 +885,8 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	year, month := h.cordiantProcessor.GetCurrentYearMonth()
-	response, err := h.cordiantAPI.SendReport(fileBase64, year, month)
+	// Отправляем в Cordiant с переданными месяцем и годом
+	response, err := h.cordiantAPI.SendReport(fileBase64, req.Year, req.Month)
 	if err != nil {
 		log.Printf("Ошибка отправки в Cordiant: %v", err)
 		sendJSON(w, r, false, "Ошибка отправки: "+err.Error(), nil, http.StatusInternalServerError)
@@ -882,7 +894,7 @@ func (h *UploadHandler) HandleSendCordiant(w http.ResponseWriter, r *http.Reques
 	}
 
 	if response.Success {
-		log.Printf("Отчет успешно отправлен в Cordiant, позиций: %d", len(cordiantItems))
+		log.Printf("Отчет успешно отправлен в Cordiant за %s.%s, позиций: %d", req.Month, req.Year, len(cordiantItems))
 	} else {
 		log.Printf("Ошибка отправки в Cordiant: %s", response.Message)
 	}
