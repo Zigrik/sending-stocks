@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -33,32 +34,6 @@ func NewCordiantAPIService(baseURL, token, login, password string) *CordiantAPIS
 	}
 }
 
-// CordiantResponseData структура для успешного ответа с data объектом
-type CordiantResponseData struct {
-	Status              string   `json:"status"`
-	Message             string   `json:"message"`
-	Title               string   `json:"title"`
-	Content             string   `json:"content"`
-	Warnings            []string `json:"warnings"`
-	Function            string   `json:"function"`
-	IsHavePrevRecords   bool     `json:"isHavePrevRecords"`
-	Warehouses          int      `json:"warehouses"`
-	WarehousesPositions int      `json:"warehousesPositions"`
-	ErrorFileStrings    []int    `json:"errorFileStrings"`
-}
-
-// CordiantError структура для ошибок
-type CordiantError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-// CordiantFailureResponse структура для ответов с error
-type CordiantFailureResponse struct {
-	Data  string        `json:"data"`
-	Error CordiantError `json:"error"`
-}
-
 // SendReport отправляет отчет в Cordiant
 func (s *CordiantAPIService) SendReport(fileBase64 string, year, month string) (*models.CordiantResponse, error) {
 	// Формируем запрос
@@ -75,6 +50,16 @@ func (s *CordiantAPIService) SendReport(fileBase64 string, year, month string) (
 	if err != nil {
 		return nil, fmt.Errorf("ошибка сериализации запроса: %v", err)
 	}
+
+	// Логируем запрос (без содержимого файла)
+	log.Printf("=== ОТПРАВКА В CORDIANT API ===")
+	log.Printf("URL: %s", s.BaseURL)
+	log.Printf("Year: %s", year)
+	log.Printf("Month: %s", month)
+	log.Printf("Token: %s... (скрыт)", s.Token[:20])
+	log.Printf("Action: %s", request.Action)
+	log.Printf("File size (base64): %d байт", len(fileBase64))
+	log.Println("===============================")
 
 	// Создаем HTTP запрос
 	req, err := http.NewRequest("POST", s.BaseURL, bytes.NewBuffer(jsonData))
@@ -97,6 +82,12 @@ func (s *CordiantAPIService) SendReport(fileBase64 string, year, month string) (
 	if err != nil {
 		return nil, fmt.Errorf("ошибка чтения ответа: %v", err)
 	}
+
+	// Логируем ответ
+	log.Printf("=== ОТВЕТ ОТ CORDIANT API ===")
+	log.Printf("Status: %d", resp.StatusCode)
+	log.Printf("Response: %s", string(body))
+	log.Println("=============================")
 
 	// Пробуем распарсить как универсальный объект
 	var rawResponse map[string]interface{}
@@ -193,4 +184,18 @@ func formatIntSlice(ints []int) string {
 		result += fmt.Sprintf("%d", v)
 	}
 	return result
+}
+
+// CordiantResponseData структура для успешного ответа с data объектом
+type CordiantResponseData struct {
+	Status              string   `json:"status"`
+	Message             string   `json:"message"`
+	Title               string   `json:"title"`
+	Content             string   `json:"content"`
+	Warnings            []string `json:"warnings"`
+	Function            string   `json:"function"`
+	IsHavePrevRecords   bool     `json:"isHavePrevRecords"`
+	Warehouses          int      `json:"warehouses"`
+	WarehousesPositions int      `json:"warehousesPositions"`
+	ErrorFileStrings    []int    `json:"errorFileStrings"`
 }
